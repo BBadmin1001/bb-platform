@@ -19,23 +19,23 @@ import { getCurrentTenantId } from "./tenant/context";
 let cached: SupabaseClient | null = null;
 
 /**
- * Lazy service-role client. Used to bypass RLS for public marketing reads.
- * (Equivalent to "everyone can read content" — but cleaner than a public RLS
- * policy that would also need write protection.)
+ * Lazy server-side Supabase client used for public marketing reads.
+ *
+ * Prefers the service-role key (bypasses RLS, snappy). Falls back to
+ * the publishable/anon key when service-role isn't configured —
+ * RLS on every public-facing table allows anon SELECT for active
+ * tenants, so the fallback is safe.
+ *
+ * Returns null only when neither URL nor any key is set.
  */
 export function getServiceClient(): SupabaseClient | null {
-  if (
-    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    !process.env.SUPABASE_SERVICE_ROLE_KEY
-  ) {
-    return null;
-  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
   if (!cached) {
-    cached = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      { auth: { persistSession: false } },
-    );
+    cached = createClient(url, key, { auth: { persistSession: false } });
   }
   return cached;
 }
