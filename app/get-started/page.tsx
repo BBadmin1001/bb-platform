@@ -1,4 +1,5 @@
-import IntakeForm from "@/components/IntakeForm";
+import { Suspense } from "react";
+import IntakeWizard from "@/components/IntakeWizard";
 
 export const metadata = {
   title: "Get a Realtor Website · BB Website Project",
@@ -66,7 +67,12 @@ export default function GetStartedPage() {
           </p>
         </div>
 
-        <IntakeForm />
+        {/* Suspense boundary because IntakeWizard reads searchParams via
+            next/navigation — Next 16 requires it to be inside a
+            Suspense for static-routing safety. */}
+        <Suspense fallback={null}>
+          <IntakeWizard />
+        </Suspense>
       </section>
 
       <section
