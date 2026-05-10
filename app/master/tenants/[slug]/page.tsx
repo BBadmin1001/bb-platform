@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink, ArrowUpRight } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/master";
 import TenantForm from "@/components/master/TenantForm";
+import DomainStatusPanel from "@/components/master/DomainStatusPanel";
+import { getPlatformTarget } from "@/lib/dns";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +19,7 @@ export default async function TenantDetailPage({
   const { data: tenant } = await supabase
     .from("tenants")
     .select(
-      "id, slug, custom_domain, realtor_name, brokerage, contact_email, contact_phone, state_abbr, status, created_at, provisioned_at, features, stripe_customer_id",
+      "id, slug, custom_domain, realtor_name, brokerage, contact_email, contact_phone, state_abbr, status, created_at, provisioned_at, features, stripe_customer_id, domain_target, domain_check_state, domain_check_value, domain_checked_at, domain_verified_at",
     )
     .eq("slug", slug)
     .maybeSingle();
@@ -101,6 +103,20 @@ export default async function TenantDetailPage({
           <ArrowUpRight size={11} className="ml-1.5" />
         </Link>
       </div>
+
+      {/* DOMAIN STATUS — first-class part of delivery, sits above
+          the rest of the form so master sees DNS state immediately. */}
+      <DomainStatusPanel
+        slug={tenant.slug}
+        status={tenant.status}
+        customDomain={tenant.custom_domain}
+        domainTarget={tenant.domain_target}
+        domainCheckState={tenant.domain_check_state}
+        domainCheckValue={tenant.domain_check_value}
+        domainCheckedAt={tenant.domain_checked_at}
+        domainVerifiedAt={tenant.domain_verified_at}
+        fallbackTarget={getPlatformTarget()}
+      />
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-10">

@@ -36,9 +36,9 @@ export default async function NewTenantPage() {
         className="text-sm max-w-2xl mb-10"
         style={{ color: "var(--muted-foreground)" }}
       >
-        Set up the realtor's identity. After creating, link them to plans
-        in /master/plans, and add their first auth user from{" "}
-        <code className="admin-mono">tenant_users</code>.
+        Every realtor on the platform brings their own domain. Save the
+        tenant first, then the next screen shows their DNS records and
+        runs a live verifier — they go live only after DNS confirms.
       </p>
 
       <TenantForm />

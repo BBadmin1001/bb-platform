@@ -11,13 +11,20 @@ const STATUS_PILL: Record<string, { label: string; bg: string; fg: string }> = {
   archived: { label: "Archived", bg: "rgba(0,0,0,0.06)", fg: "#555" },
 };
 
+const DOMAIN_PILL: Record<string, { label: string; bg: string; fg: string }> = {
+  unset: { label: "No domain", bg: "rgba(0,0,0,0.06)", fg: "#555" },
+  pending: { label: "DNS pending", bg: "rgba(255,167,38,0.16)", fg: "#a65300" },
+  verified: { label: "DNS ✓", bg: "rgba(76,175,80,0.14)", fg: "#1b5e20" },
+  mismatch: { label: "DNS mismatch", bg: "rgba(229,57,53,0.14)", fg: "#a51a1a" },
+};
+
 export default async function TenantsList() {
   const { supabase } = await requireSuperAdmin();
 
   const { data: tenants } = await supabase
     .from("tenants")
     .select(
-      "id, slug, custom_domain, realtor_name, brokerage, state_abbr, status, created_at, provisioned_at",
+      "id, slug, custom_domain, realtor_name, brokerage, state_abbr, status, created_at, provisioned_at, domain_check_state, domain_verified_at",
     )
     .order("created_at", { ascending: false });
 
@@ -95,6 +102,8 @@ export default async function TenantsList() {
         <div className="space-y-2">
           {(tenants ?? []).map((t) => {
             const pill = STATUS_PILL[t.status] ?? STATUS_PILL.archived;
+            const domainPill =
+              DOMAIN_PILL[t.domain_check_state] ?? DOMAIN_PILL.unset;
             const activeSubs = subsByTenant.get(t.id) ?? 0;
             return (
               <Link
@@ -131,6 +140,16 @@ export default async function TenantsList() {
                     >
                       {pill.label}
                     </span>
+                    <span
+                      className="text-[10px] uppercase tracking-[0.18em] px-2 py-0.5 rounded-full"
+                      style={{
+                        background: domainPill.bg,
+                        color: domainPill.fg,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {domainPill.label}
+                    </span>
                     {activeSubs > 0 && (
                       <span className="master-pill">
                         {activeSubs} sub{activeSubs === 1 ? "" : "s"}
@@ -141,10 +160,8 @@ export default async function TenantsList() {
                     className="text-[11px] truncate admin-mono"
                     style={{ color: "var(--muted-foreground)" }}
                   >
-                    /{t.slug}
-                    {t.custom_domain && (
-                      <span> · {t.custom_domain}</span>
-                    )}
+                    {t.custom_domain ?? <span style={{ fontStyle: "italic" }}>no domain yet</span>}
+                    <span> · /{t.slug}</span>
                     {t.state_abbr && <span> · {t.state_abbr}</span>}
                   </p>
                 </div>

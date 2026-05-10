@@ -86,6 +86,58 @@ export default function TenantForm({ initial, editingId }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 pb-32">
+      {/* DOMAIN — first thing master fills in, because every realtor
+          on the platform brings their own. The site doesn't ship until
+          this is set + DNS verified. */}
+      <section
+        className="admin-card p-6 space-y-5"
+        style={{
+          borderColor: "color-mix(in srgb, var(--primary) 30%, transparent)",
+        }}
+      >
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <p
+            className="text-xs uppercase tracking-[0.18em]"
+            style={{ color: "var(--primary)", fontWeight: 700 }}
+          >
+            Custom domain · required
+          </p>
+          {!editingId && (
+            <span
+              className="text-[10px] uppercase tracking-[0.18em]"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              Start here
+            </span>
+          )}
+        </div>
+        <div>
+          <label className="admin-label">Domain</label>
+          <input
+            value={v.custom_domain ?? ""}
+            onChange={(e) =>
+              set(
+                "custom_domain",
+                e.target.value
+                  .replace(/^https?:\/\//, "")
+                  .replace(/\/.*$/, "")
+                  .toLowerCase() || null,
+              )
+            }
+            placeholder="saminabilal.com"
+            className="admin-input admin-mono"
+          />
+          <p
+            className="text-[11px] mt-1.5"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            The domain the customer brings (GoDaddy, Namecheap, etc.). After
+            saving, the Domain Status panel shows DNS records to copy + a
+            verification button. Tenant goes live only once DNS resolves.
+          </p>
+        </div>
+      </section>
+
       <section className="admin-card p-6 space-y-5">
         <p
           className="text-xs uppercase tracking-[0.18em]"
@@ -110,42 +162,9 @@ export default function TenantForm({ initial, editingId }: Props) {
               className="text-[11px] mt-1.5"
               style={{ color: "var(--muted-foreground)" }}
             >
-              Subdomain identifier. Site lives at{" "}
-              <code className="admin-mono">{v.slug || "<slug>"}.bbplatform.com</code>.
+              Internal identifier. Used as a fallback preview URL while DNS
+              propagates: <code className="admin-mono">{v.slug || "<slug>"}.bbplatform.com</code>.
             </p>
-          </div>
-
-          <div>
-            <label className="admin-label">Custom domain (optional)</label>
-            <input
-              value={v.custom_domain ?? ""}
-              onChange={(e) => set("custom_domain", e.target.value || null)}
-              placeholder="saminabilal.com"
-              className="admin-input admin-mono"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="admin-label">Realtor / business name</label>
-          <input
-            required
-            value={v.realtor_name}
-            onChange={(e) => set("realtor_name", e.target.value)}
-            placeholder="Samina Bilal"
-            className="admin-input"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="admin-label">Brokerage</label>
-            <input
-              value={v.brokerage ?? ""}
-              onChange={(e) => set("brokerage", e.target.value || null)}
-              placeholder="RE/MAX Galaxy"
-              className="admin-input"
-            />
           </div>
           <div>
             <label className="admin-label">State (2 letters)</label>
@@ -162,6 +181,27 @@ export default function TenantForm({ initial, editingId }: Props) {
               maxLength={2}
             />
           </div>
+        </div>
+
+        <div>
+          <label className="admin-label">Realtor / business name</label>
+          <input
+            required
+            value={v.realtor_name}
+            onChange={(e) => set("realtor_name", e.target.value)}
+            placeholder="Samina Bilal"
+            className="admin-input"
+          />
+        </div>
+
+        <div>
+          <label className="admin-label">Brokerage</label>
+          <input
+            value={v.brokerage ?? ""}
+            onChange={(e) => set("brokerage", e.target.value || null)}
+            placeholder="RE/MAX Galaxy"
+            className="admin-input"
+          />
         </div>
       </section>
 
