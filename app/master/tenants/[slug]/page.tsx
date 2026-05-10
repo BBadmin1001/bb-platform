@@ -6,6 +6,7 @@ import TenantForm from "@/components/master/TenantForm";
 import DomainStatusPanel from "@/components/master/DomainStatusPanel";
 import FeaturesPanel from "@/components/master/FeaturesPanel";
 import LifecyclePanel from "@/components/master/LifecyclePanel";
+import AIPolishPanel from "@/components/master/AIPolishPanel";
 import { getPlatformTarget } from "@/lib/dns";
 import {
   FEATURE_NAMES,
@@ -150,6 +151,11 @@ export default async function TenantDetailPage({
         <Stat label="Content blocks" value={contentCount ?? 0} />
         <Stat label="Active subs" value={subs?.length ?? 0} />
       </div>
+
+      {/* AI polish — Phase 13. Regenerates bespoke copy from the
+          intake payload using house-style rules. Master reviews the
+          result before publishing. */}
+      <AIPolishPanel slug={tenant.slug} />
 
       {/* Feature flags — read from the cached tenants.features jsonb,
           with a manual "Resync features" escape hatch for the rare case

@@ -14,6 +14,8 @@ import {
   sendDomainInstructions,
   sendSiteLive,
 } from "@/lib/email";
+import { polishMeetSection } from "@/lib/aiPolish";
+import type { IntakeData } from "@/lib/intakeSchema";
 
 export type LifecycleStage =
   | "intake"
@@ -470,4 +472,75 @@ export async function rotatePreviewToken(
 
   revalidatePath(`/master/tenants/${slug}`);
   return { ok: true, slug, previewToken: newToken };
+}
+
+/**
+ * Run AI polish on a tenant's home.meet block. Pulls the original
+ * intake_data from the linked prospect, asks Claude for a polished
+ * version, writes the result onto content_blocks. The tenant's
+ * existing meet block is replaced wholesale — master should only
+ * call this when the customer hasn't manually edited yet.
+ *
+ * Future expansion: polish about.bio, hero.subtitle, services.cards
+ * with the same pattern. Starting with `home.meet` because it's the
+ * single most visible chunk of bespoke copy.
+ */
+export async function aiPolishMeet(
+  slug: string,
+): Promise<Result & { preview?: string }> {
+  const { supabase } = await requireSuperAdmin();
+
+  // Resolve tenant + prospect → intake_data.
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id, prospect_id, realtor_name, brokerage")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!tenant) return { ok: false, error: "Tenant not found." };
+  if (!tenant.prospect_id) {
+    return {
+      ok: false,
+      error:
+        "This tenant wasn't created from a wizard intake — there's no source data to polish from.",
+    };
+  }
+
+  const { data: prospect } = await supabase
+    .from("prospects")
+    .select("intake_data")
+    .eq("id", tenant.prospect_id)
+    .maybeSingle();
+  const intake = (prospect?.intake_data ?? null) as IntakeData | null;
+  if (!intake) {
+    return {
+      ok: false,
+      error: "The linked prospect has no intake_data to polish from.",
+    };
+  }
+
+  // Run the polish.
+  const polished = await polishMeetSection(intake);
+  if (!polished.ok) {
+    return { ok: false, error: polished.error };
+  }
+
+  // Write onto content_blocks (upsert by tenant_id+page+key).
+  const { error: upErr } = await supabase
+    .from("content_blocks")
+    .upsert(
+      {
+        tenant_id: tenant.id,
+        page: "home",
+        key: "meet",
+        value: JSON.stringify(polished.meet),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "tenant_id,page,key" },
+    );
+  if (upErr) return { ok: false, error: upErr.message };
+
+  revalidatePath(`/master/tenants/${slug}`);
+  // Return the polished heading so the UI can show a "applied: …"
+  // confirmation without an extra round-trip.
+  return { ok: true, slug, preview: polished.meet.heading };
 }
