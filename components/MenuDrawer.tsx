@@ -11,12 +11,14 @@ export default function MenuDrawer({
   portraitAvatar,
   realtorName,
   brokerage,
+  customNavPages = [],
 }: {
   open: boolean;
   onClose: () => void;
   portraitAvatar?: string;
   realtorName?: string;
   brokerage?: string;
+  customNavPages?: { slug: string; title: string }[];
 }) {
   const avatar = portraitAvatar || site.portrait.avatar;
   const displayName = realtorName?.trim() || "Realtor";
@@ -111,6 +113,25 @@ export default function MenuDrawer({
                   ))}
                 </div>
               )}
+            </div>
+          ))}
+
+          {/* Custom pages flagged show_in_nav by the realtor — appended
+              after the standard items so the existing menu order is
+              preserved. */}
+          {customNavPages.map((p) => (
+            <div
+              key={p.slug}
+              className="border-b border-white/10 last:border-0"
+            >
+              <Link
+                href={`/p/${p.slug}`}
+                onClick={onClose}
+                className="block py-5 text-2xl md:text-[1.6rem] font-light tracking-wide uppercase hover:text-white/70 transition-colors"
+                style={{ fontWeight: 300, letterSpacing: "0.06em" }}
+              >
+                {p.title}
+              </Link>
             </div>
           ))}
 

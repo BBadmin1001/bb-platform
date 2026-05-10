@@ -544,3 +544,112 @@ export async function aiPolishMeet(
   // confirmation without an extra round-trip.
   return { ok: true, slug, preview: polished.meet.heading };
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Custom pages — Phase 15
+//
+// Master creates pages on a tenant's site. Realtor edits content
+// from /admin/pages once master has set up the slug.
+// ─────────────────────────────────────────────────────────────────────
+
+export type CustomPageInput = {
+  slug: string;
+  title: string;
+  body_md?: string;
+  meta_description?: string;
+  is_published?: boolean;
+  show_in_nav?: boolean;
+};
+
+const RESERVED_PAGE_SLUGS = new Set([
+  "admin", "master", "api", "_next",
+  "about", "buyers", "sellers", "communities", "closings", "contact",
+  "reviews", "partners", "path-to-ownership", "privacy", "open-house",
+  "form", "leave-review", "leave-review-internal", "get-started",
+  "onboarding", "p", "preview", "realtor-in", "sitemap.xml",
+  "robots.txt", "favicon.ico",
+]);
+
+/**
+ * Create a new custom page on a tenant's site. Master-only — only
+ * super admins can call this. The realtor can then edit the body
+ * and toggle visibility from /admin/pages.
+ */
+export async function createCustomPage(
+  tenantSlug: string,
+  input: CustomPageInput,
+): Promise<Result & { pageId?: string }> {
+  const { supabase } = await requireSuperAdmin();
+
+  const slug = input.slug.trim().toLowerCase();
+  const title = input.title.trim();
+  if (!slug || !title) {
+    return { ok: false, error: "Slug and title are required." };
+  }
+  if (!/^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$/.test(slug)) {
+    return {
+      ok: false,
+      error:
+        "Slug must be lowercase letters, numbers, or dashes (3–64 chars, no leading or trailing dash).",
+    };
+  }
+  if (RESERVED_PAGE_SLUGS.has(slug)) {
+    return {
+      ok: false,
+      error: `"${slug}" collides with a built-in route. Pick a different slug.`,
+    };
+  }
+
+  // Resolve tenant.
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id")
+    .eq("slug", tenantSlug)
+    .maybeSingle();
+  if (!tenant) return { ok: false, error: "Tenant not found." };
+
+  const { data: row, error } = await supabase
+    .from("custom_pages")
+    .insert({
+      tenant_id: tenant.id,
+      slug,
+      title,
+      body_md: input.body_md ?? "",
+      meta_description: input.meta_description?.trim() || null,
+      is_published: input.is_published ?? true,
+      show_in_nav: input.show_in_nav ?? false,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    if (error.message.includes("duplicate") || error.code === "23505") {
+      return {
+        ok: false,
+        error: `A page with slug "${slug}" already exists on this tenant.`,
+      };
+    }
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath(`/master/tenants/${tenantSlug}`);
+  return { ok: true, slug: tenantSlug, pageId: row.id };
+}
+
+/**
+ * Master-only: hard delete a custom page. The realtor can only
+ * unpublish, never delete — keeps the URL safe from accidental
+ * destruction.
+ */
+export async function deleteCustomPage(
+  tenantSlug: string,
+  pageId: string,
+): Promise<Result> {
+  const { supabase } = await requireSuperAdmin();
+  const { error } = await supabase
+    .from("custom_pages")
+    .delete()
+    .eq("id", pageId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/master/tenants/${tenantSlug}`);
+  return { ok: true };
+}

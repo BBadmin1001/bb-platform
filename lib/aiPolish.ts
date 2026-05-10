@@ -105,7 +105,10 @@ Generate the home.meet block. Use "${firstName}" as the first name.`;
 
   try {
     const res = await c.messages.create({
-      model: "claude-3-5-sonnet-latest",
+      // Sonnet 4.5 is the right tier for content polish — fast, smart
+      // enough for tone/voice work, and ~5x cheaper than Opus. Pinned
+      // to the alias so it tracks the latest 4.5 release.
+      model: "claude-sonnet-4-5",
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],

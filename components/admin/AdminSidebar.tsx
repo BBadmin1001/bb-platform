@@ -34,6 +34,7 @@ import {
   Search,
   Globe,
   Lock,
+  FileText,
 } from "lucide-react";
 import NextImage from "next/image";
 import { createClient } from "@/lib/supabase/client";
@@ -65,6 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/brand", label: "Brand Identity", icon: Palette, matchPrefix: true },
       { href: "/admin/domain", label: "Your Domain", icon: Globe, matchPrefix: true },
       { href: "/admin/media", label: "Media Library", icon: ImageIcon, matchPrefix: true },
+      { href: "/admin/pages", label: "Custom Pages", icon: FileText, matchPrefix: true },
       { href: "/admin/reviews", label: "Reviews", icon: Star, matchPrefix: true },
     ],
   },

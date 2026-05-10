@@ -7,6 +7,7 @@ import DomainStatusPanel from "@/components/master/DomainStatusPanel";
 import FeaturesPanel from "@/components/master/FeaturesPanel";
 import LifecyclePanel from "@/components/master/LifecyclePanel";
 import AIPolishPanel from "@/components/master/AIPolishPanel";
+import CustomPagesPanel from "@/components/master/CustomPagesPanel";
 import { getPlatformTarget } from "@/lib/dns";
 import {
   FEATURE_NAMES,
@@ -42,6 +43,14 @@ export default async function TenantDetailPage({
       "id, status, current_period_end, plan:plan_id ( name, price_cents, interval )",
     )
     .eq("tenant_id", tenant.id);
+
+  // Custom pages for this tenant (the master-managed Phase 15 ones).
+  const { data: customPages } = await supabase
+    .from("custom_pages")
+    .select("id, slug, title, is_published, show_in_nav")
+    .eq("tenant_id", tenant.id)
+    .order("display_order", { ascending: true })
+    .order("created_at", { ascending: true });
 
   // Quick stats: how many tenant_users + content_blocks.
   const [{ count: userCount }, { count: contentCount }] = await Promise.all([
@@ -156,6 +165,25 @@ export default async function TenantDetailPage({
           intake payload using house-style rules. Master reviews the
           result before publishing. */}
       <AIPolishPanel slug={tenant.slug} />
+
+      {/* Custom pages — Phase 15. Master creates pages on a tenant's
+          site; the realtor edits the body from /admin/pages. */}
+      <CustomPagesPanel
+        tenantSlug={tenant.slug}
+        tenantHost={
+          (tenant.custom_domain as string | null) ||
+          (process.env.NEXT_PUBLIC_MASTER_HOSTNAME ||
+            "bb-platform-387.netlify.app") +
+            `?tenant=${tenant.slug}&preview=${tenant.preview_token}`
+        }
+        initialPages={(customPages ?? []) as Array<{
+          id: string;
+          slug: string;
+          title: string;
+          is_published: boolean;
+          show_in_nav: boolean;
+        }>}
+      />
 
       {/* Feature flags — read from the cached tenants.features jsonb,
           with a manual "Resync features" escape hatch for the rare case

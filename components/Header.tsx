@@ -11,10 +11,12 @@ export default function Header({
   portraitAvatar,
   realtorName,
   brokerage,
+  customNavPages = [],
 }: {
   portraitAvatar?: string;
   realtorName?: string;
   brokerage?: string;
+  customNavPages?: { slug: string; title: string }[];
 }) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
@@ -101,6 +103,7 @@ export default function Header({
         portraitAvatar={portraitAvatar}
         realtorName={realtorName}
         brokerage={brokerage}
+        customNavPages={customNavPages}
       />
     </>
   );

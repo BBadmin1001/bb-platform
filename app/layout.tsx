@@ -5,10 +5,10 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BrandThemeStyle from "@/components/BrandThemeStyle";
-import { getPortrait, getFeaturedImage } from "@/lib/contentLoader";
+import { getPortrait, getFeaturedImage, getServiceClient } from "@/lib/contentLoader";
 import { getAnalyticsMeasurementId } from "@/lib/integrationStore";
 import { siteOrigin } from "@/lib/qrcode";
-import { getCurrentTenant } from "@/lib/tenant/context";
+import { getCurrentTenant, getCurrentTenantId } from "@/lib/tenant/context";
 import { headers } from "next/headers";
 
 const montserrat = Montserrat({
@@ -82,6 +82,25 @@ export default async function RootLayout({
   const realtorName = tenant?.realtor_name ?? "Realtor";
   const brokerage = tenant?.brokerage ?? "";
 
+  // Custom pages flagged show_in_nav surface in the public Header
+  // and MenuDrawer alongside the built-in nav items.
+  type NavCustomPage = { slug: string; title: string };
+  let customNavPages: NavCustomPage[] = [];
+  if (tenant) {
+    const supabase = getServiceClient();
+    const tenantId = await getCurrentTenantId();
+    if (supabase && tenantId) {
+      const { data } = await supabase
+        .from("custom_pages")
+        .select("slug, title")
+        .eq("tenant_id", tenantId)
+        .eq("is_published", true)
+        .eq("show_in_nav", true)
+        .order("display_order", { ascending: true });
+      customNavPages = (data ?? []) as NavCustomPage[];
+    }
+  }
+
   // Skip the public Header/Footer for the admin and master shells —
   // they own their full-viewport chrome and the public chrome would
   // double-render at the top of every admin page. proxy.ts stamps
@@ -122,6 +141,7 @@ export default async function RootLayout({
             portraitAvatar={portrait.avatar}
             realtorName={realtorName}
             brokerage={brokerage}
+            customNavPages={customNavPages}
           />
         )}
         <main>{children}</main>

@@ -315,6 +315,29 @@ a:hover svg, button:hover svg, .group:hover svg, .glow:hover {
     position: relative;
     isolation: isolate;
   }
+  /* prose-page — styling for the markdown HTML rendered onto custom
+     pages (/p/[slug]). Calm, readable, matches the existing
+     editorial vibe without depending on @tailwindcss/typography. */
+  .prose-page h1 { font-size: 2rem; font-weight: 200; letter-spacing: 0.005em; line-height: 1.15; margin: 2.5rem 0 1rem; }
+  .prose-page h2 { font-size: 1.5rem; font-weight: 300; letter-spacing: 0.005em; line-height: 1.2;  margin: 2rem 0 0.75rem; }
+  .prose-page h3 { font-size: 1.2rem; font-weight: 400; line-height: 1.3; margin: 1.5rem 0 0.6rem; }
+  .prose-page p  { margin: 0 0 1.1rem; }
+  .prose-page a  { color: #142840; text-decoration: underline; text-underline-offset: 3px; }
+  .prose-page ul, .prose-page ol { margin: 0 0 1.1rem; padding-left: 1.4rem; }
+  .prose-page li { margin: 0 0 0.4rem; }
+  .prose-page blockquote {
+    border-left: 2px solid rgba(20, 40, 64, 0.25);
+    margin: 1.5rem 0;
+    padding: 0.4rem 0 0.4rem 1.2rem;
+    color: rgba(20, 40, 64, 0.75);
+    font-style: italic;
+  }
+  .prose-page img  { max-width: 100%; height: auto; border-radius: 4px; margin: 1.5rem 0; }
+  .prose-page hr   { border: 0; border-top: 1px solid rgba(20, 40, 64, 0.15); margin: 2rem 0; }
+  .prose-page code { background: rgba(20, 40, 64, 0.06); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.9em; }
+  .prose-page pre  { background: rgba(20, 40, 64, 0.06); padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 1rem 0; }
+  .prose-page table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+  .prose-page th, .prose-page td { padding: 0.6rem 0.8rem; border-bottom: 1px solid rgba(20, 40, 64, 0.12); text-align: left; }
 }
 
 .glass-light::before, .glass-light::after,
