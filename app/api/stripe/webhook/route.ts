@@ -248,9 +248,16 @@ async function autoProvisionFromPaidProspect(
 /**
  * customer.subscription.* — keep tenant_subscriptions table in sync.
  *
- * The subscription belongs to a Stripe customer. We find the matching
- * prospect (and through it the tenant) via stripe_customer_id and
- * upsert a tenant_subscriptions row per Stripe subscription.
+ * Tenant lookup tries two paths in order:
+ *   1. The subscription's metadata.tenant_id — set by the self-serve
+ *      upgrade flow (createPlanCheckoutSession). This is the primary
+ *      path for monthly upgrades after delivery.
+ *   2. Match the Stripe customer back to a prospect via
+ *      stripe_customer_id, then follow tenant_id. This is the
+ *      legacy path for setup-fee-bundled-with-monthly checkouts.
+ *
+ * If we can't find a tenant via either, log and bail — the next
+ * webhook event for the same sub will retry.
  */
 async function handleSubscriptionChange(event: Stripe.Event) {
   const sub = event.data.object as Stripe.Subscription;
@@ -260,29 +267,53 @@ async function handleSubscriptionChange(event: Stripe.Event) {
 
   const supabase = createServiceClient();
 
-  // Find tenant via prospect → tenant_id linkback.
-  const { data: prospect } = await supabase
-    .from("prospects")
-    .select("id, tenant_id")
-    .eq("stripe_customer_id", customerId)
-    .maybeSingle();
-  if (!prospect?.tenant_id) {
-    // No tenant yet — provisioning hasn't run. The next checkout-
-    // session event will catch up.
+  // ── 1. Resolve tenant ────────────────────────────────────────
+  let tenantId: string | null = (sub.metadata?.tenant_id as string) ?? null;
+
+  if (!tenantId) {
+    // Fall back to prospect linkback (legacy / setup-fee path).
+    const { data: prospect } = await supabase
+      .from("prospects")
+      .select("id, tenant_id")
+      .eq("stripe_customer_id", customerId)
+      .maybeSingle();
+    tenantId = (prospect?.tenant_id as string | null) ?? null;
+  }
+
+  if (!tenantId) {
+    console.warn(
+      "[stripe webhook] subscription event without resolvable tenant",
+      { subId: sub.id, customer: customerId, metadata: sub.metadata },
+    );
     return;
   }
 
-  // Map the first item's price → plan id via stripe_price_id.
+  // Make sure the tenant has the customer id on file so future
+  // billing portal sessions can find it without going through
+  // prospects.
+  await supabase
+    .from("tenants")
+    .update({ stripe_customer_id: customerId })
+    .eq("id", tenantId)
+    .is("stripe_customer_id", null);
+
+  // ── 2. Resolve plan via stripe_price_id ──────────────────────
   const priceId = sub.items.data[0]?.price?.id;
   if (!priceId) return;
-
   const { data: plan } = await supabase
     .from("plans")
     .select("id")
     .eq("stripe_price_id", priceId)
     .maybeSingle();
-  if (!plan) return;
+  if (!plan) {
+    console.warn(
+      "[stripe webhook] subscription event for unknown price",
+      priceId,
+    );
+    return;
+  }
 
+  // ── 3. Upsert / cancel the tenant_subscriptions row ─────────
   if (event.type === "customer.subscription.deleted") {
     await supabase
       .from("tenant_subscriptions")
@@ -292,11 +323,10 @@ async function handleSubscriptionChange(event: Stripe.Event) {
       })
       .eq("stripe_subscription_id", sub.id);
   } else {
-    // upsert
-    // In recent Stripe API versions `current_period_end` moved from the
-    // subscription onto each subscription item (one billing period per
-    // item). For our single-item subs, the first item's period is the
-    // one to record.
+    // In recent Stripe API versions `current_period_end` moved from
+    // the subscription onto each subscription item (one billing
+    // period per item). For our single-item subs, the first item's
+    // period is the one to record.
     const firstItemPeriodEnd = sub.items.data[0]?.current_period_end;
     const periodEndIso = firstItemPeriodEnd
       ? new Date(firstItemPeriodEnd * 1000).toISOString()
@@ -304,7 +334,7 @@ async function handleSubscriptionChange(event: Stripe.Event) {
 
     await supabase.from("tenant_subscriptions").upsert(
       {
-        tenant_id: prospect.tenant_id,
+        tenant_id: tenantId,
         plan_id: plan.id,
         stripe_subscription_id: sub.id,
         status: sub.status as
@@ -324,7 +354,7 @@ async function handleSubscriptionChange(event: Stripe.Event) {
 
   // Recompute the tenant's feature flags so admin/public UI flips
   // immediately on subscription state change.
-  await reconcileTenantFeatures(prospect.tenant_id);
+  await reconcileTenantFeatures(tenantId);
 }
 
 /**

@@ -199,3 +199,72 @@ export function verifyWebhook(payload: string, signature: string | null): Stripe
   );
   return JSON.parse(payload) as Stripe.Event;
 }
+
+/**
+ * Create a Stripe Checkout Session for a tenant subscribing to one of
+ * the plans defined in /master/plans. Used by the self-serve upgrade
+ * flow inside tenant admin — the locked feature's "Subscribe" button
+ * calls a server action that wraps this and redirects the user to
+ * the returned `url`.
+ *
+ * Encodes `tenant_id` and `plan_id` as session metadata so the webhook
+ * (handleSubscriptionChange) can flip the tenant's feature flag and
+ * record the subscription on payment.
+ */
+export async function createPlanCheckoutSession(input: {
+  tenantId: string;
+  planId: string;
+  priceId: string;
+  /** Where Stripe sends the user after a successful checkout. */
+  successUrl: string;
+  /** Where Stripe sends them if they cancel before paying. */
+  cancelUrl: string;
+  /** Pre-fill on the Stripe page when the tenant has a contact email
+   *  on file. Optional. */
+  customerEmail?: string;
+}): Promise<{ id: string; url: string }> {
+  const stripe = getStripe();
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    line_items: [{ price: input.priceId, quantity: 1 }],
+    success_url: input.successUrl,
+    cancel_url: input.cancelUrl,
+    customer_email: input.customerEmail || undefined,
+    metadata: {
+      tenant_id: input.tenantId,
+      plan_id: input.planId,
+      platform: "bb-website-project",
+      flow: "self-serve-upgrade",
+    },
+    // Enable Stripe's customer portal so cancel/update works without
+    // us building it from scratch.
+    subscription_data: {
+      metadata: {
+        tenant_id: input.tenantId,
+        plan_id: input.planId,
+      },
+    },
+  });
+  if (!session.url) {
+    throw new Error("Stripe didn't return a checkout URL");
+  }
+  return { id: session.id, url: session.url };
+}
+
+/**
+ * Create a Stripe Billing Portal session for a tenant — gives them a
+ * one-stop URL to update payment method, view invoices, and cancel
+ * subscriptions. Far less code than rebuilding any of that
+ * ourselves.
+ */
+export async function createBillingPortalSession(input: {
+  customerId: string;
+  returnUrl: string;
+}): Promise<{ url: string }> {
+  const stripe = getStripe();
+  const portal = await stripe.billingPortal.sessions.create({
+    customer: input.customerId,
+    return_url: input.returnUrl,
+  });
+  return { url: portal.url };
+}

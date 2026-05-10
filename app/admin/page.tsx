@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
 import AdminLoginForm from "@/components/admin/AdminLoginForm";
 import AdminCard from "@/components/admin/AdminCard";
+import BillingShortcut from "@/components/admin/BillingShortcut";
 import { getRequestContext } from "@/lib/tenant/context";
 import {
   FileText,
@@ -233,6 +234,8 @@ export default async function AdminDashboard({
             />
           ))}
         </div>
+
+        <BillingShortcut unlockedCount={unlocked.size} />
 
         {/* Status — what's live and what's next */}
         <div className="mt-10 admin-card p-6 bg-cream-soft/50 border-dashed">

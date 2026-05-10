@@ -1,13 +1,20 @@
-import { Lock, Mail } from "lucide-react";
+import { Lock } from "lucide-react";
 import {
   FEATURE_META,
   tenantHasFeature,
   type FeatureName,
 } from "@/lib/features";
+import UpgradeBannerCTA from "./UpgradeBannerCTA";
 
 /**
  * Server component that renders nothing if the active tenant has the
  * given feature, OR a friendly upgrade card if they don't.
+ *
+ * The "Subscribe" button is a client child (UpgradeBannerCTA) that
+ * calls the startPlanCheckout server action and redirects the user to
+ * Stripe — so the realtor can pay the monthly $30 / $20 / etc.
+ * directly from inside their admin without bothering the platform
+ * team.
  *
  * Intended use:
  *
@@ -16,9 +23,6 @@ import {
  *     if (banner) return banner;          // not unlocked → render banner only
  *     return <AdminShell><AnalyticsContent /></AdminShell>;
  *   }
- *
- * Or render alongside the page when you want the controls visible
- * but read-only — pass `mode="alongside"`.
  */
 export async function UpgradeBanner({
   feature,
@@ -56,24 +60,17 @@ export async function UpgradeBanner({
           className="text-lg mb-2"
           style={{ color: "var(--card-foreground)", fontWeight: 600 }}
         >
-          {meta.label} isn't active on your plan.
+          {meta.label} isn&apos;t active on your plan.
         </h2>
         <p
           className="text-sm mb-4"
           style={{ color: "var(--muted-foreground)", lineHeight: 1.7 }}
         >
-          This feature unlocks when your{" "}
-          <strong>{meta.planLabel}</strong> subscription is active. Reach
-          out to your platform owner to add it — they'll send you a quick
-          payment link.
+          Unlock {meta.label} (and the rest of the {meta.planLabel}) for{" "}
+          <strong>{meta.price}</strong>. You&apos;ll be redirected to a
+          secure Stripe checkout — no card on file required up front.
         </p>
-        <a
-          href="mailto:?subject=Add%20feature%20to%20my%20website"
-          className="admin-btn admin-btn-secondary inline-flex"
-        >
-          <Mail size={13} className="mr-2" />
-          Email platform owner
-        </a>
+        <UpgradeBannerCTA planSlug={meta.planSlug} planLabel={meta.planLabel} />
       </div>
     </div>
   );
