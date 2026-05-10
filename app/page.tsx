@@ -1,126 +1,187 @@
 import {
   getRequestContext,
   getCurrentTenant,
-  getCurrentTenantSlug,
 } from "@/lib/tenant/context";
-import { headers } from "next/headers";
 
 /**
- * Phase 1.6 hello-world. Proves the proxy → resolver → server-component
- * loop works end-to-end. Will be replaced by the marketing home in
- * Phase 2 once we port the design system.
+ * Phase 1.5 placeholder home — exercises the design system end to
+ * end: Montserrat font, per-tenant brand colours, frosted-glass
+ * card, .btn-solid / .btn-outline-dark, .eyebrow tracking.
+ *
+ * Replaced in Phase 2 with the full ported Hero + sections.
  */
 export default async function Home() {
-  const [ctx, tenant, slug, h] = await Promise.all([
+  const [ctx, tenant] = await Promise.all([
     getRequestContext(),
     getCurrentTenant(),
-    getCurrentTenantSlug(),
-    headers(),
   ]);
 
-  const host = h.get("host");
+  if (ctx === "master") return <MasterStub />;
+  if (ctx === "unknown" || !tenant) return <UnknownStub />;
+
+  // tenant context — render the branded hero
+  const tagline =
+    (tenant.features as { tagline?: string })?.tagline ??
+    [tenant.brokerage, tenant.state_abbr ? `${tenant.state_abbr}` : null]
+      .filter(Boolean)
+      .join(" · ");
 
   return (
-    <main
-      style={{
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-        padding: "3rem",
-        maxWidth: "60rem",
-        margin: "0 auto",
-        color: "#111",
-        background: "#fafafa",
-        minHeight: "100vh",
-      }}
-    >
-      <h1 style={{ fontSize: "1.6rem", fontWeight: 600, marginBottom: "0.4rem" }}>
-        BB Website Project — tenant probe
-      </h1>
-      <p style={{ color: "#666", marginBottom: "2rem", fontSize: "0.9rem" }}>
-        Proxy resolves the tenant on every request. The header values
-        below are stamped by <code>proxy.ts</code> and read here via{" "}
-        <code>next/headers</code>.
-      </p>
-
-      <table
+    <main className="flex-1">
+      {/* HERO ─────────────────────────────────────────────── */}
+      <section
+        className="relative section-y-lg gutter-x bg-navy text-white overflow-hidden"
         style={{
-          width: "100%",
-          fontSize: "0.85rem",
-          borderCollapse: "collapse",
+          background: "rgb(var(--brand-primary-rgb))",
         }}
       >
-        <tbody>
-          <Row k="Host" v={host ?? "—"} />
-          <Row k="Context" v={ctx} highlight={ctx === "tenant" ? "ok" : ctx === "master" ? "info" : "warn"} />
-          <Row k="Tenant slug" v={slug ?? "—"} />
-          <Row k="Tenant id" v={tenant?.id ?? "—"} />
-          <Row k="Realtor name" v={tenant?.realtor_name ?? "—"} />
-          <Row k="Brokerage" v={tenant?.brokerage ?? "—"} />
-          <Row k="Status" v={tenant?.status ?? "—"} />
-          <Row k="State" v={tenant?.state_abbr ?? "—"} />
-          <Row k="Custom domain" v={tenant?.custom_domain ?? "—"} />
-          <Row
-            k="Features"
-            v={
-              tenant?.features
-                ? JSON.stringify(tenant.features)
-                : "—"
-            }
-          />
-        </tbody>
-      </table>
+        <div className="max-w-5xl mx-auto text-center relative">
+          <p className="eyebrow-light mb-6">{tagline || "Realtor"}</p>
+          <h1
+            className="heading-display text-4xl sm:text-5xl md:text-6xl mb-8"
+            style={{ color: "white" }}
+          >
+            {tenant.realtor_name}
+          </h1>
+          <p
+            className="max-w-2xl mx-auto text-base md:text-lg leading-relaxed mb-12"
+            style={{ color: "rgba(255,255,255,0.78)" }}
+          >
+            Buying or selling a home is a story you tell once. Let&apos;s make
+            it the right one — with an agent who knows the streets, the
+            schools, and the rhythms of every neighborhood.
+          </p>
+          <div className="flex flex-wrap justify-center gap-4">
+            <a href="#contact" className="btn-glass">
+              Schedule a call
+            </a>
+            <a href="#valuation" className="btn-outline-light">
+              Get a home valuation
+            </a>
+          </div>
+        </div>
+      </section>
 
-      <h2 style={{ fontSize: "1rem", fontWeight: 600, marginTop: "2rem" }}>
-        How to test
-      </h2>
-      <ul style={{ fontSize: "0.85rem", lineHeight: 1.7, color: "#444" }}>
-        <li>
-          <code>localhost:3000</code> → <code>unknown</code> (no tenants seeded yet)
-        </li>
-        <li>
-          <code>localhost:3000/?tenant=samina</code> → resolves once we
-          insert a tenant with <code>slug=&apos;samina&apos;</code>
-        </li>
-        <li>
-          <code>master.localhost:3000</code> → <code>master</code>
-        </li>
-      </ul>
+      {/* GLASS CARD STRIP ─────────────────────────────────── */}
+      <section className="section-y gutter-x">
+        <div className="max-w-5xl mx-auto">
+          <p className="eyebrow text-center mb-4">Phase 1 demo</p>
+          <h2 className="heading-section text-2xl md:text-3xl text-center mb-12 text-ink">
+            Design system live
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card
+              eyebrow="Multi-tenancy"
+              title="Hostname routing"
+              body="Every request resolves a tenant via subdomain, custom domain, or ?tenant=. Headers stamped by proxy.ts."
+            />
+            <Card
+              eyebrow="Brand theme"
+              title="Per-tenant colour"
+              body="The navy you see is loaded from tenant.features.brand. Other tenants get their own palette without a redeploy."
+            />
+            <Card
+              eyebrow="Database"
+              title="RLS by default"
+              body="tenants, plans, tenant_subscriptions, tenant_users — every row scoped through has_tenant_access()."
+            />
+          </div>
+
+          <div className="mt-16 flex flex-wrap justify-center gap-4">
+            <a href="#" className="btn-solid">
+              Primary action
+            </a>
+            <a href="#" className="btn-outline-dark">
+              Secondary
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* DEBUG STRIP ──────────────────────────────────────── */}
+      <section className="section-y gutter-x bg-cream-soft">
+        <div className="max-w-3xl mx-auto">
+          <p className="eyebrow mb-4">Active tenant</p>
+          <dl
+            className="grid grid-cols-[max-content_1fr] gap-x-8 gap-y-2 text-sm font-mono"
+            style={{ color: "rgba(0,0,0,0.7)" }}
+          >
+            <DRow k="slug"          v={tenant.slug} />
+            <DRow k="id"            v={tenant.id} />
+            <DRow k="status"        v={tenant.status} />
+            <DRow k="state"         v={tenant.state_abbr ?? "—"} />
+            <DRow k="custom_domain" v={tenant.custom_domain ?? "—"} />
+          </dl>
+        </div>
+      </section>
     </main>
   );
 }
 
-function Row({
-  k,
-  v,
-  highlight,
+function Card({
+  eyebrow,
+  title,
+  body,
 }: {
-  k: string;
-  v: string;
-  highlight?: "ok" | "info" | "warn";
+  eyebrow: string;
+  title: string;
+  body: string;
 }) {
-  const color =
-    highlight === "ok"
-      ? "#0a7"
-      : highlight === "info"
-        ? "#06c"
-        : highlight === "warn"
-          ? "#a60"
-          : "#111";
   return (
-    <tr style={{ borderTop: "1px solid #eee" }}>
-      <th
-        style={{
-          textAlign: "left",
-          padding: "0.55rem 0.5rem",
-          width: "12rem",
-          color: "#888",
-          fontWeight: 500,
-        }}
+    <div className="glass-light rounded-2xl p-7">
+      <p className="eyebrow mb-3">{eyebrow}</p>
+      <h3
+        className="text-lg mb-3"
+        style={{ color: "rgb(var(--brand-primary-rgb))", fontWeight: 500 }}
       >
-        {k}
-      </th>
-      <td style={{ padding: "0.55rem 0.5rem", color, fontWeight: 600 }}>
-        {v}
-      </td>
-    </tr>
+        {title}
+      </h3>
+      <p className="text-sm" style={{ color: "rgba(0,0,0,0.66)" }}>
+        {body}
+      </p>
+    </div>
+  );
+}
+
+function DRow({ k, v }: { k: string; v: string }) {
+  return (
+    <>
+      <dt style={{ color: "rgba(0,0,0,0.4)" }}>{k}</dt>
+      <dd>{v}</dd>
+    </>
+  );
+}
+
+function MasterStub() {
+  return (
+    <main className="flex-1 flex items-center justify-center bg-navy text-white section-y gutter-x">
+      <div className="max-w-md text-center">
+        <p className="eyebrow-light mb-3">Platform</p>
+        <h1 className="heading-display text-3xl md:text-4xl mb-4">
+          Master dashboard
+        </h1>
+        <p className="text-sm" style={{ color: "rgba(255,255,255,0.65)" }}>
+          Coming in Phase 3. Sign-in + super-admin gate go here.
+        </p>
+      </div>
+    </main>
+  );
+}
+
+function UnknownStub() {
+  return (
+    <main className="flex-1 flex items-center justify-center section-y gutter-x">
+      <div className="max-w-md text-center">
+        <p className="eyebrow mb-3">404</p>
+        <h1 className="text-2xl text-ink mb-4" style={{ fontWeight: 500 }}>
+          No site here yet.
+        </h1>
+        <p className="text-sm" style={{ color: "rgba(0,0,0,0.55)" }}>
+          This hostname doesn&apos;t match any active tenant. If you expect a
+          site at this address, contact the platform owner.
+        </p>
+      </div>
+    </main>
   );
 }
