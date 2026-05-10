@@ -9,6 +9,11 @@ import {
   isNetlifyConfigured,
 } from "@/lib/netlify";
 import { reconcileTenantFeatures } from "@/lib/features";
+import {
+  sendSiteReadyForReview,
+  sendDomainInstructions,
+  sendSiteLive,
+} from "@/lib/email";
 
 export type LifecycleStage =
   | "intake"
@@ -366,7 +371,9 @@ export async function setTenantLifecycleStage(
 
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id, custom_domain, domain_check_state")
+    .select(
+      "id, custom_domain, domain_check_state, contact_email, realtor_name, preview_token",
+    )
     .eq("slug", slug)
     .maybeSingle();
   if (!tenant) return { ok: false, error: "Tenant not found." };
@@ -404,6 +411,36 @@ export async function setTenantLifecycleStage(
     .update(updates)
     .eq("id", tenant.id);
   if (error) return { ok: false, error: error.message };
+
+  // ── Notifications per stage transition ─────────────────────────
+  // Best-effort — email failures don't roll back the stage change.
+  if (tenant.contact_email) {
+    const masterHost =
+      process.env.NEXT_PUBLIC_MASTER_HOSTNAME ||
+      process.env.MASTER_HOSTNAME ||
+      "bb-platform-387.netlify.app";
+    if (stage === "ready_for_review") {
+      const previewUrl = `https://${masterHost}/?tenant=${slug}&preview=${tenant.preview_token}`;
+      void sendSiteReadyForReview({
+        to: tenant.contact_email as string,
+        realtorName: (tenant.realtor_name as string) || "there",
+        previewUrl,
+      });
+    } else if (stage === "ready_for_domain" && tenant.custom_domain) {
+      void sendDomainInstructions({
+        to: tenant.contact_email as string,
+        realtorName: (tenant.realtor_name as string) || "there",
+        desiredDomain: tenant.custom_domain as string,
+        cnameTarget: getPlatformTarget(),
+      });
+    } else if (stage === "live" && tenant.custom_domain) {
+      void sendSiteLive({
+        to: tenant.contact_email as string,
+        realtorName: (tenant.realtor_name as string) || "there",
+        liveUrl: `https://${tenant.custom_domain}`,
+      });
+    }
+  }
 
   revalidatePath(`/master/tenants/${slug}`);
   revalidatePath("/master/tenants");

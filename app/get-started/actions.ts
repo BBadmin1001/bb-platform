@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentTenantSlug } from "@/lib/tenant/context";
 import { createPaymentLinkForQuote, isStripeConfigured } from "@/lib/stripe";
+import {
+  sendIntakeReceived,
+  sendInternalNewPaidProspect,
+} from "@/lib/email";
 import type { IntakeData } from "@/lib/intakeSchema";
 
 // ─────────────────────────────────────────────────────────────────────
@@ -208,6 +212,27 @@ export async function submitIntakeWizard(
         // Don't fail submit — master can retry manually.
       }
     }
+  }
+
+  // ── 4. Notifications (best-effort) ───────────────────────────
+  // Confirmation to the customer.
+  void sendIntakeReceived({
+    to: email,
+    contactName: contact_name,
+    hasPaid: false, // payment confirmation comes from the webhook
+  });
+  // Internal alert when a price was pre-agreed (i.e. they're going
+  // straight to checkout). Cold leads with no price get the alert
+  // when master generates the quote.
+  if (input.agreedSetupCents !== null && input.agreedSetupCents > 0) {
+    void sendInternalNewPaidProspect({
+      prospectId: prospect.id,
+      contactName: contact_name,
+      brokerage: brokerage_name,
+      email,
+      agreedSetupCents: input.agreedSetupCents,
+      salesRepRef: input.salesRepRef,
+    });
   }
 
   return { ok: true, prospectId: prospect.id, checkoutUrl };
