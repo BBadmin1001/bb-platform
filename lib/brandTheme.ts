@@ -1,81 +1,156 @@
-import "server-only";
-
 /**
- * Brand theme — per-tenant CSS variable overrides.
+ * Brand theme — primary/surface colors + optional gradient overrides.
  *
- * Reads `tenant.features.brand` (set during onboarding or via the
- * tenant's admin panel). When the tenant hasn't customised their
- * theme, returns null so the site falls back to the editorial
- * navy/cream defaults declared in app/globals.css.
+ * Persisted as a single `content_blocks` row (page="brand", key="theme")
+ * with this JSON shape:
  *
- * Returned shape mirrors the CSS vars in globals.css verbatim. The
- * <BrandThemeStyle> component serialises this object into a tiny
- * <style> block at the top of the document.
+ *   {
+ *     "primary":         "#142840",
+ *     "surface":         "#F2EFEA",
+ *     "primaryGradient": "" | "linear-gradient(...)",
+ *     "surfaceGradient": "" | "linear-gradient(...)"
+ *   }
  *
- * Once content_blocks lands (next migration), brand theme will be
- * driven by the dedicated `brand_identity` block instead. Today
- * `tenant.features.brand` is the source of truth.
+ * Read by `getBrandTheme()` server-side, fed into <BrandThemeStyle />, and
+ * injected into the layout as a `<style>` tag overriding the :root CSS
+ * variables. Tailwind's `bg-navy`, `text-navy`, `bg-cream`, etc. all read
+ * from those variables, so changing them re-skins the entire site.
+ *
+ * Helpers here:
+ *
+ *   getBrandTheme()       — server-side loader
+ *   hexToRgbTriplet()     — "#142840" → "20 40 64"
+ *   deriveDarker()        — primary − 18% lightness
+ *   deriveLighter()       — primary + 18% lightness
+ *   deriveSurfaceSoft()   — surface − 4% lightness
  */
 
-export interface BrandTheme {
-  /** RGB triplet "r g b" — e.g. "20 40 64" */
-  primaryRgb?: string;
-  primaryDarkRgb?: string;
-  primaryLightRgb?: string;
-  surfaceRgb?: string;
-  surfaceSoftRgb?: string;
-  /** Optional CSS gradient string applied on top of bg-navy. */
-  primaryGradient?: string;
-  /** Optional CSS gradient string applied on top of bg-cream. */
-  surfaceGradient?: string;
+import { getServiceClient } from "./contentLoader";
+import { getCurrentTenantId } from "./tenant/context";
+
+export type BrandTheme = {
+  /** Hex color, e.g. "#142840". Default = navy from the original palette. */
+  primary: string;
+  /** Hex color, e.g. "#F2EFEA". Default = cream. */
+  surface: string;
+  /**
+   * Optional CSS `background-image` value for navy backgrounds (header,
+   * footer, hero). Empty string means "use the solid color only".
+   */
+  primaryGradient: string;
+  /** Same idea for cream surfaces. Usually left blank. */
+  surfaceGradient: string;
+};
+
+export const DEFAULT_BRAND_THEME: BrandTheme = {
+  primary: "#142840",
+  surface: "#F2EFEA",
+  primaryGradient: "",
+  surfaceGradient: "",
+};
+
+/** Curated gradient presets shown in the admin theme editor. */
+export const GRADIENT_PRESETS: { label: string; value: string }[] = [
+  {
+    label: "Navy depth",
+    value: "linear-gradient(135deg, #0E1C30 0%, #25406A 100%)",
+  },
+  {
+    label: "Sunset",
+    value: "linear-gradient(135deg, #ED6A5A 0%, #F4D35E 100%)",
+  },
+  {
+    label: "Atlantic",
+    value: "linear-gradient(135deg, #0F4C81 0%, #4D9DE0 100%)",
+  },
+  {
+    label: "Forest",
+    value: "linear-gradient(135deg, #1B4332 0%, #52796F 100%)",
+  },
+  {
+    label: "Plum",
+    value: "linear-gradient(135deg, #2B1B3F 0%, #6B3FA0 100%)",
+  },
+  {
+    label: "Charcoal",
+    value: "linear-gradient(135deg, #1F1F1F 0%, #4A4A4A 100%)",
+  },
+];
+
+/** Hex (#abc / #aabbcc) → "r g b" triplet string used in CSS variables. */
+export function hexToRgbTriplet(hex: string): string {
+  const v = hex.trim().replace(/^#/, "");
+  const full =
+    v.length === 3
+      ? v
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : v;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) {
+    return "20 40 64"; // fall back to navy on bad input
+  }
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `${r} ${g} ${b}`;
 }
 
-/**
- * Pull a brand theme from a tenant.features payload. Returns null
- * if the tenant hasn't set any colours — caller then skips emitting
- * the override <style> block.
- */
-export function brandThemeFromTenant(
-  features: Record<string, unknown> | null | undefined,
-): BrandTheme | null {
-  if (!features) return null;
-  const brand = (features as { brand?: Record<string, unknown> }).brand;
-  if (!brand || typeof brand !== "object") return null;
-
-  const get = (k: string) => {
-    const v = (brand as Record<string, unknown>)[k];
-    return typeof v === "string" && v.trim() ? v : undefined;
-  };
-
-  const theme: BrandTheme = {
-    primaryRgb:       get("primary"),
-    primaryDarkRgb:   get("primary_dark"),
-    primaryLightRgb:  get("primary_light"),
-    surfaceRgb:       get("surface"),
-    surfaceSoftRgb:   get("surface_soft"),
-    primaryGradient:  get("primary_gradient"),
-    surfaceGradient:  get("surface_gradient"),
-  };
-
-  // If literally nothing was set, return null so we don't emit an
-  // empty <style> block.
-  return Object.values(theme).some(Boolean) ? theme : null;
+/** Mix a hex color toward black (factor 0..1). */
+function mixWithBlack(hex: string, factor: number): string {
+  const triplet = hexToRgbTriplet(hex).split(" ").map(Number);
+  const [r, g, b] = triplet;
+  const m = (c: number) => Math.round(c * (1 - factor));
+  return rgbToHex(m(r), m(g), m(b));
 }
 
+/** Mix a hex color toward white (factor 0..1). */
+function mixWithWhite(hex: string, factor: number): string {
+  const triplet = hexToRgbTriplet(hex).split(" ").map(Number);
+  const [r, g, b] = triplet;
+  const m = (c: number) => Math.round(c + (255 - c) * factor);
+  return rgbToHex(m(r), m(g), m(b));
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  return (
+    "#" +
+    [r, g, b]
+      .map((c) => Math.max(0, Math.min(255, c)).toString(16).padStart(2, "0"))
+      .join("")
+  );
+}
+
+export const deriveDarker = (hex: string) => mixWithBlack(hex, 0.22);
+export const deriveLighter = (hex: string) => mixWithWhite(hex, 0.28);
+export const deriveSurfaceSoft = (hex: string) => mixWithBlack(hex, 0.04);
+
 /**
- * Serialise a BrandTheme into a CSS rule body. Keep the output tiny
- * — emits only the keys that were set, leaving the rest to fall back
- * to the defaults in globals.css.
+ * Returns the saved brand theme, or DEFAULT_BRAND_THEME when nothing is
+ * persisted yet (or Supabase isn't configured).
  */
-export function brandThemeToCss(theme: BrandTheme): string {
-  const lines: string[] = [];
-  const push = (k: string, v?: string) => v && lines.push(`  ${k}: ${v};`);
-  push("--brand-primary-rgb",       theme.primaryRgb);
-  push("--brand-primary-dark-rgb",  theme.primaryDarkRgb);
-  push("--brand-primary-light-rgb", theme.primaryLightRgb);
-  push("--brand-surface-rgb",       theme.surfaceRgb);
-  push("--brand-surface-soft-rgb",  theme.surfaceSoftRgb);
-  push("--brand-primary-gradient",  theme.primaryGradient);
-  push("--brand-surface-gradient",  theme.surfaceGradient);
-  return lines.length ? `:root {\n${lines.join("\n")}\n}` : "";
+export async function getBrandTheme(): Promise<BrandTheme> {
+  try {
+    const supabase = getServiceClient();
+    if (!supabase) return DEFAULT_BRAND_THEME;
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) return DEFAULT_BRAND_THEME;
+    const { data } = await supabase
+      .from("content_blocks")
+      .select("value")
+      .eq("tenant_id", tenantId)
+      .eq("page", "brand")
+      .eq("key", "theme")
+      .maybeSingle();
+    if (!data?.value) return DEFAULT_BRAND_THEME;
+    const parsed = JSON.parse(data.value) as Partial<BrandTheme>;
+    return {
+      primary: parsed.primary || DEFAULT_BRAND_THEME.primary,
+      surface: parsed.surface || DEFAULT_BRAND_THEME.surface,
+      primaryGradient: parsed.primaryGradient || "",
+      surfaceGradient: parsed.surfaceGradient || "",
+    };
+  } catch {
+    return DEFAULT_BRAND_THEME;
+  }
 }

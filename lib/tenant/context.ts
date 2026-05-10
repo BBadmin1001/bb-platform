@@ -1,6 +1,6 @@
 import "server-only";
 import { headers } from "next/headers";
-import { createClient as createServerClient } from "@/lib/supabase/server";
+import { createClient as createCookieClient } from "@/lib/supabase/server";
 import type { ResolvedTenant } from "./resolver";
 
 /**
@@ -51,7 +51,7 @@ export async function getCurrentTenant(): Promise<ResolvedTenant | null> {
   const id = await getCurrentTenantId();
   if (!id) return null;
 
-  const supabase = await createServerClient();
+  const supabase = await createCookieClient();
   const { data } = await supabase
     .from("tenants")
     .select(

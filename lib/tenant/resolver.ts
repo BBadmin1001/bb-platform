@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createSbClient } from "@supabase/supabase-js";
 
 /**
  * Tenant resolution lives at the heart of the platform.
@@ -69,7 +69,7 @@ function extractSubdomain(host: string): string | null {
  * One Supabase client per Edge Runtime instance, lazily created.
  * Anon-keyed; reads are gated by RLS.
  */
-let _client: ReturnType<typeof createClient> | null = null;
+let _client: ReturnType<typeof createSbClient> | null = null;
 function client() {
   if (_client) return _client;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -79,7 +79,7 @@ function client() {
       "tenant resolver: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY missing in env",
     );
   }
-  _client = createClient(url, key, {
+  _client = createSbClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: (...args) => fetch(...args) },
   });
