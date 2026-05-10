@@ -105,6 +105,11 @@ export async function proxy(request: NextRequest) {
   // master hostname's "front page" is the master dashboard (or login),
   // BUT customer-facing onboarding URLs (/get-started, /onboarding/done)
   // still work — those are how sales reps send prospects in.
+  //
+  // EXCEPTION: when the URL carries a valid `?preview=<token>` query,
+  // the resolver above already returned `kind: "tenant"` (regardless
+  // of host), so we never reach this branch in that case. No special-
+  // casing needed here — preview links just route through normally.
   const ALLOWED_ON_MASTER_HOST = [
     "/master",
     "/admin",

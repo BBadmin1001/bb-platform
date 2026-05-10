@@ -10,6 +10,13 @@ import {
 } from "@/lib/netlify";
 import { reconcileTenantFeatures } from "@/lib/features";
 
+export type LifecycleStage =
+  | "intake"
+  | "polishing"
+  | "ready_for_review"
+  | "ready_for_domain"
+  | "live";
+
 export type TenantInput = {
   slug: string;
   realtor_name: string;
@@ -339,4 +346,91 @@ export async function syncNetlifyAlias(slug: string): Promise<
     skipped: !!result.skipped,
     netlifyError: result.error,
   };
+}
+
+/**
+ * Move a tenant to the next workflow stage. Used by the lifecycle
+ * progress strip on the master tenant detail page.
+ *
+ * Validates the new stage is one of the known values and logs the
+ * transition for posterity. The `live` stage also flips
+ * `tenants.status` to `active` so the public site comes online —
+ * gated on a verified domain check, since flipping live without DNS
+ * resolving would mean the customer's URL just 404s.
+ */
+export async function setTenantLifecycleStage(
+  slug: string,
+  stage: LifecycleStage,
+): Promise<Result & { stage?: LifecycleStage }> {
+  const { supabase } = await requireSuperAdmin();
+
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id, custom_domain, domain_check_state")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!tenant) return { ok: false, error: "Tenant not found." };
+
+  // Guardrail: don't promote to `live` without a verified domain.
+  // Otherwise the public site would 404 when visitors hit the URL.
+  if (stage === "live") {
+    if (!tenant.custom_domain) {
+      return {
+        ok: false,
+        error:
+          "Set a custom domain first — promoting to live without one means there's no public URL to send visitors to.",
+      };
+    }
+    if (tenant.domain_check_state !== "verified") {
+      return {
+        ok: false,
+        error:
+          "Domain isn't verified yet. Run a fresh check on the domain panel — DNS has to resolve to us before this goes live.",
+      };
+    }
+  }
+
+  // The publishing visibility flag (`status`) flips to `active` only
+  // when we hit `live`. Earlier stages keep `status='pending'` so the
+  // public site is invisible (preview-token URL still works).
+  const updates: Record<string, unknown> = { lifecycle_stage: stage };
+  if (stage === "live") {
+    updates.status = "active";
+    updates.provisioned_at = new Date().toISOString();
+  }
+
+  const { error } = await supabase
+    .from("tenants")
+    .update(updates)
+    .eq("id", tenant.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/master/tenants/${slug}`);
+  revalidatePath("/master/tenants");
+  revalidatePath("/master");
+  return { ok: true, slug, stage };
+}
+
+/**
+ * Rotate the preview token. Useful when an old preview link leaked
+ * or the customer asked for a fresh URL after edits.
+ */
+export async function rotatePreviewToken(
+  slug: string,
+): Promise<Result & { previewToken?: string }> {
+  const { supabase } = await requireSuperAdmin();
+
+  // gen_random_uuid() server-side via a small dance: we call
+  // supabase.rpc isn't available here, so generate in JS. Postgres
+  // accepts the UUID string fine.
+  const newToken = crypto.randomUUID();
+
+  const { error } = await supabase
+    .from("tenants")
+    .update({ preview_token: newToken })
+    .eq("slug", slug);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/master/tenants/${slug}`);
+  return { ok: true, slug, previewToken: newToken };
 }

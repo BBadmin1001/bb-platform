@@ -100,13 +100,29 @@ export async function resolveTenant(
   searchParams?: URLSearchParams,
 ): Promise<ResolveContext> {
   const host = normalizeHostname(hostname);
+  const supabase = client();
+
+  // 0. Preview-token override — runs BEFORE master/host checks so the
+  // polish team can share a preview URL on ANY hostname (including
+  // master.brandbonjour.com) and visitors see the in-progress tenant
+  // site without needing the tenant to be `active`.
+  const previewToken = searchParams?.get("preview");
+  if (previewToken && /^[0-9a-f-]{36}$/i.test(previewToken)) {
+    const { data } = await supabase
+      .from("tenants")
+      .select(TENANT_COLUMNS)
+      .eq("preview_token", previewToken)
+      .maybeSingle();
+    if (data) return { kind: "tenant", tenant: data as ResolvedTenant };
+  }
 
   // 1. Master dashboard.
   if (host === MASTER_HOST) {
     return { kind: "master" };
   }
 
-  const supabase = client();
+  // (continued — supabase client is already initialized above for the
+  // preview-token check.)
 
   // 2. Custom domain.
   {

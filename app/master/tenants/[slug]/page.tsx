@@ -5,12 +5,14 @@ import { requireSuperAdmin } from "@/lib/master";
 import TenantForm from "@/components/master/TenantForm";
 import DomainStatusPanel from "@/components/master/DomainStatusPanel";
 import FeaturesPanel from "@/components/master/FeaturesPanel";
+import LifecyclePanel from "@/components/master/LifecyclePanel";
 import { getPlatformTarget } from "@/lib/dns";
 import {
   FEATURE_NAMES,
   tenantFeaturesIncludes,
   type FeatureName,
 } from "@/lib/features-meta";
+import type { LifecycleStage } from "@/app/master/tenants/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,7 @@ export default async function TenantDetailPage({
   const { data: tenant } = await supabase
     .from("tenants")
     .select(
-      "id, slug, custom_domain, realtor_name, brokerage, contact_email, contact_phone, state_abbr, status, created_at, provisioned_at, features, stripe_customer_id, domain_target, domain_check_state, domain_check_value, domain_checked_at, domain_verified_at, netlify_alias_added_at, netlify_alias_synced_for, netlify_alias_error, netlify_last_synced_at",
+      "id, slug, custom_domain, realtor_name, brokerage, contact_email, contact_phone, state_abbr, status, created_at, provisioned_at, features, stripe_customer_id, domain_target, domain_check_state, domain_check_value, domain_checked_at, domain_verified_at, netlify_alias_added_at, netlify_alias_synced_for, netlify_alias_error, netlify_last_synced_at, lifecycle_stage, preview_token",
     )
     .eq("slug", slug)
     .maybeSingle();
@@ -109,6 +111,20 @@ export default async function TenantDetailPage({
           <ArrowUpRight size={11} className="ml-1.5" />
         </Link>
       </div>
+
+      {/* LIFECYCLE — workflow stage progress + preview link. Sits at
+          the top of the page so master sees the operational state
+          before they dig into anything else. */}
+      <LifecyclePanel
+        slug={tenant.slug}
+        initialStage={(tenant.lifecycle_stage as LifecycleStage) ?? "intake"}
+        initialPreviewToken={tenant.preview_token as string}
+        masterHost={
+          process.env.NEXT_PUBLIC_MASTER_HOSTNAME ||
+          process.env.MASTER_HOSTNAME ||
+          "bb-platform-387.netlify.app"
+        }
+      />
 
       {/* DOMAIN STATUS — first-class part of delivery, sits above
           the rest of the form so master sees DNS state immediately. */}
