@@ -1,7 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { requireSuperAdmin } from "@/lib/master";
+import {
+  ensurePlanPrice,
+  createPaymentLinkForQuote,
+  isStripeConfigured,
+} from "@/lib/stripe";
 
 type Result =
   | { ok: true; prospectId?: string; paymentLinkUrl?: string }
@@ -86,14 +92,27 @@ export async function createQuote(input: {
     return { ok: false, error: "Setup fee can't be negative." };
   }
 
-  // Confirm the plan slugs all exist and are active.
-  let planRows:
-    | Array<{ slug: string; price_cents: number; name: string; interval: string }>
-    | null = null;
+  // Confirm the plan slugs all exist + are active. Pull every column
+  // ensurePlanPrice needs.
+  type PlanRow = {
+    id: string;
+    slug: string;
+    name: string;
+    description: string | null;
+    price_cents: number;
+    interval: "monthly" | "yearly";
+    features: unknown;
+    is_active: boolean;
+    stripe_product_id: string | null;
+    stripe_price_id: string | null;
+  };
+  let planRows: PlanRow[] = [];
   if (input.planSlugs.length > 0) {
     const { data: plans, error: pErr } = await supabase
       .from("plans")
-      .select("slug, price_cents, name, interval, is_active")
+      .select(
+        "id, slug, name, description, price_cents, interval, features, is_active, stripe_product_id, stripe_price_id",
+      )
       .in("slug", input.planSlugs);
     if (pErr) return { ok: false, error: pErr.message };
     const inactive = (plans ?? []).filter((p) => !p.is_active).map((p) => p.slug);
@@ -103,7 +122,7 @@ export async function createQuote(input: {
         error: `Inactive plans selected: ${inactive.join(", ")}. Activate them in /master/plans first.`,
       };
     }
-    planRows = (plans ?? []).filter((p) => input.planSlugs.includes(p.slug));
+    planRows = (plans ?? []) as PlanRow[];
   }
 
   // Update the prospect row with the quote data either way — even if
@@ -120,12 +139,89 @@ export async function createQuote(input: {
     .eq("id", input.prospectId);
   if (upErr) return { ok: false, error: upErr.message };
 
-  // STRIPE WIRING — Pass B. When STRIPE_SECRET_KEY is set in env,
-  // this branch creates the Payment Link and saves the URL on the
-  // prospect row. Until then we no-op gracefully.
-  if (process.env.STRIPE_SECRET_KEY) {
-    // (Stripe API calls go here — added when we have test keys.)
-    // For now, leave the link fields as-is.
+  // STRIPE WIRING — when STRIPE_SECRET_KEY is set, create a real
+  // Payment Link and save the URL on the prospect row. Otherwise
+  // skip silently (UI shows "Stripe not configured").
+  if (isStripeConfigured()) {
+    // Pull prospect contact info needed for the link.
+    const { data: prospect } = await supabase
+      .from("prospects")
+      .select("id, business_name, contact_name, email")
+      .eq("id", input.prospectId)
+      .maybeSingle();
+    if (!prospect) return { ok: false, error: "Prospect vanished mid-call." };
+
+    // Make sure every selected plan has a Stripe Price (lazy-create).
+    // Patch back the price/product ids as we mint them.
+    const recurringPriceIds: string[] = [];
+    for (const p of planRows) {
+      try {
+        const { priceId, productId } = await ensurePlanPrice(p);
+        if (
+          priceId !== p.stripe_price_id ||
+          productId !== p.stripe_product_id
+        ) {
+          await supabase
+            .from("plans")
+            .update({
+              stripe_price_id: priceId,
+              stripe_product_id: productId,
+            })
+            .eq("id", p.id);
+        }
+        recurringPriceIds.push(priceId);
+      } catch (e) {
+        return {
+          ok: false,
+          error: `Stripe error creating price for ${p.slug}: ${
+            e instanceof Error ? e.message : "unknown"
+          }`,
+        };
+      }
+    }
+
+    // Resolve absolute success URL from the request host.
+    const h = await headers();
+    const proto = h.get("x-forwarded-proto") ?? "http";
+    const host = h.get("host") ?? "localhost:3010";
+    const origin = `${proto}://${host}`;
+
+    try {
+      const link = await createPaymentLinkForQuote({
+        prospect: {
+          id: prospect.id,
+          business_name: prospect.business_name,
+          contact_name: prospect.contact_name,
+          email: prospect.email,
+        },
+        setupFeeCents: input.setupFeeCents,
+        recurringPriceIds,
+        successUrl: `${origin}/onboarding/done?prospect=${prospect.id}`,
+      });
+
+      await supabase
+        .from("prospects")
+        .update({
+          stripe_payment_link_id: link.paymentLinkId,
+          stripe_payment_link_url: link.url,
+        })
+        .eq("id", input.prospectId);
+
+      revalidatePath(`/master/prospects/${input.prospectId}`);
+      revalidatePath("/master/prospects");
+      return {
+        ok: true,
+        prospectId: input.prospectId,
+        paymentLinkUrl: link.url,
+      };
+    } catch (e) {
+      return {
+        ok: false,
+        error: `Stripe error creating Payment Link: ${
+          e instanceof Error ? e.message : "unknown"
+        }`,
+      };
+    }
   }
 
   revalidatePath(`/master/prospects/${input.prospectId}`);

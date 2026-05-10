@@ -82,7 +82,8 @@ export default async function RootLayout({
   const hideShell =
     path.startsWith("/admin") ||
     path.startsWith("/master") ||
-    path.startsWith("/get-started");
+    path.startsWith("/get-started") ||
+    path.startsWith("/onboarding");
 
   return (
     <html lang="en" className={montserrat.variable}>
