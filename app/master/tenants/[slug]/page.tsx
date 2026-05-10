@@ -4,7 +4,13 @@ import { ArrowLeft, ExternalLink, ArrowUpRight } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/master";
 import TenantForm from "@/components/master/TenantForm";
 import DomainStatusPanel from "@/components/master/DomainStatusPanel";
+import FeaturesPanel from "@/components/master/FeaturesPanel";
 import { getPlatformTarget } from "@/lib/dns";
+import {
+  FEATURE_NAMES,
+  tenantFeaturesIncludes,
+  type FeatureName,
+} from "@/lib/features-meta";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +135,16 @@ export default async function TenantDetailPage({
         <Stat label="Active subs" value={subs?.length ?? 0} />
       </div>
 
+      {/* Feature flags — read from the cached tenants.features jsonb,
+          with a manual "Resync features" escape hatch for the rare case
+          when the Stripe webhook didn't reconcile automatically. */}
+      <FeaturesPanel
+        slug={tenant.slug}
+        features={FEATURE_NAMES.filter((f) =>
+          tenantFeaturesIncludes(tenant.features, f),
+        ) as FeatureName[]}
+      />
+
       {/* Subscriptions list */}
       {subs && subs.length > 0 && (
         <section className="admin-card p-6 mb-10">
@@ -140,9 +156,15 @@ export default async function TenantDetailPage({
           </p>
           <ul className="space-y-2">
             {subs.map((s) => {
-              const plan = s.plan as
+              // Same Supabase one-to-many widening trick as elsewhere:
+              // cast through unknown and normalise array → first row.
+              const planRaw = s.plan as unknown as
                 | { name: string; price_cents: number; interval: string }
+                | { name: string; price_cents: number; interval: string }[]
                 | null;
+              const plan = Array.isArray(planRaw)
+                ? planRaw[0] ?? null
+                : planRaw;
               return (
                 <li
                   key={s.id}

@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
 import AnalyticsWizard from "@/components/admin/integrations/AnalyticsWizard";
 import { getAnalyticsIntegration } from "@/lib/integrationStore";
+import { tenantHasFeature } from "@/lib/features";
+import { UpgradeBanner } from "@/components/admin/UpgradeBanner";
 
 export default async function AnalyticsIntegrationPage() {
   const supabase = await createClient();
@@ -12,6 +14,26 @@ export default async function AnalyticsIntegrationPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
+
+  // Analytics tag injection is gated on the Visibility plan. Mirrors
+  // the gate on /admin/analytics — both routes lead to the same
+  // upgrade screen when locked.
+  if (!(await tenantHasFeature("analytics"))) {
+    return (
+      <AdminShell user={{ email: user.email ?? "" }}>
+        <div className="max-w-3xl mx-auto py-8">
+          <Link
+            href="/admin/analytics"
+            className="inline-flex items-center gap-1.5 text-xs mb-6"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            <ArrowLeft size={14} /> Back to Website Analytics
+          </Link>
+          <UpgradeBanner feature="analytics" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   const integration = await getAnalyticsIntegration();
   const existing = integration

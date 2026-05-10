@@ -5,6 +5,7 @@ import "./admin.css";
 import { AdminLayoutProvider } from "@/components/admin/AdminLayoutProvider";
 import { getPortrait } from "@/lib/contentLoader";
 import { getCurrentTenant } from "@/lib/tenant/context";
+import { getCurrentTenantFeatures } from "@/lib/features";
 
 // Admin sans = Montserrat, already loaded globally by app/layout.tsx and
 // available as `--font-montserrat`. Just adds Source Code Pro here for the
@@ -33,11 +34,14 @@ export async function generateMetadata() {
  * already bounced to /admin/login by proxy.ts.
  */
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-  // Fetch the brand portrait + tenant once at the layout level — every
-  // admin page shares these; result is cached for the request lifetime.
-  const [portrait, tenant] = await Promise.all([
+  // Fetch the brand portrait + tenant + unlocked features once at the
+  // layout level — every admin page shares these; results are cached
+  // for the request lifetime. Features are read from the cached
+  // tenants.features jsonb (no extra DB hit beyond getCurrentTenant).
+  const [portrait, tenant, unlocked] = await Promise.all([
     getPortrait(),
     getCurrentTenant(),
+    getCurrentTenantFeatures(),
   ]);
 
   return (
@@ -45,6 +49,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       <AdminLayoutProvider
         portraitUrl={portrait.avatar}
         realtorName={tenant?.realtor_name}
+        unlockedFeatures={Array.from(unlocked)}
       >
         {children}
       </AdminLayoutProvider>

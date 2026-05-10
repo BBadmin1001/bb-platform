@@ -33,14 +33,28 @@ import {
   BarChart3,
   Search,
   Globe,
+  Lock,
 } from "lucide-react";
 import NextImage from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { useAdminLayout } from "@/components/admin/AdminLayoutProvider";
+import type { FeatureName } from "@/lib/features-meta";
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutTemplate;
+  matchPrefix?: boolean;
+  /** If set, the item is gated on this feature. Locked items still
+   *  render in the sidebar (so customers can see what they could
+   *  unlock) but show a lock badge and route to a "Locked" upgrade
+   *  banner page. */
+  feature?: FeatureName;
+};
 
 type NavGroup = {
   label: string;
-  items: { href: string; label: string; icon: typeof LayoutTemplate; matchPrefix?: boolean }[];
+  items: NavItem[];
 };
 
 const NAV_GROUPS: NavGroup[] = [
@@ -57,8 +71,20 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Growth",
     items: [
-      { href: "/admin/analytics", label: "Analytics", icon: BarChart3, matchPrefix: true },
-      { href: "/admin/seo", label: "SEO", icon: Search, matchPrefix: true },
+      {
+        href: "/admin/analytics",
+        label: "Analytics",
+        icon: BarChart3,
+        matchPrefix: true,
+        feature: "analytics",
+      },
+      {
+        href: "/admin/seo",
+        label: "SEO",
+        icon: Search,
+        matchPrefix: true,
+        feature: "seo_county_pages",
+      },
     ],
   },
   {
@@ -66,7 +92,13 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/admin/inbox", label: "Inbox", icon: Inbox, matchPrefix: true },
       { href: "/admin/forms", label: "Forms", icon: ClipboardList, matchPrefix: true },
-      { href: "/admin/integrations/google", label: "Integrations", icon: Plug, matchPrefix: false },
+      {
+        href: "/admin/integrations/google",
+        label: "Integrations",
+        icon: Plug,
+        matchPrefix: false,
+        feature: "google_reviews_widget",
+      },
     ],
   },
 ];
@@ -80,11 +112,15 @@ export default function AdminSidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { portraitUrl, realtorName } = useAdminLayout();
+  const { portraitUrl, realtorName, unlockedFeatures } = useAdminLayout();
 
-  function isActive(item: NavGroup["items"][number]) {
+  function isActive(item: NavItem) {
     if (item.matchPrefix) return pathname.startsWith(item.href);
     return pathname === item.href;
+  }
+
+  function isLocked(item: NavItem) {
+    return !!item.feature && !unlockedFeatures.has(item.feature);
   }
 
   async function signOut() {
@@ -172,23 +208,43 @@ export default function AdminSidebar({
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item);
+                const locked = isLocked(item);
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     onClick={onClose}
-                    className="admin-tab w-full"
+                    className="admin-tab w-full flex items-center"
                     style={
                       active
                         ? {
                             background: "var(--sidebar-primary)",
                             color: "var(--sidebar-primary-foreground)",
                           }
+                        : locked
+                        ? { opacity: 0.65 }
+                        : undefined
+                    }
+                    title={
+                      locked
+                        ? `${item.label} — locked. Open to learn how to unlock.`
                         : undefined
                     }
                   >
                     <Icon size={15} strokeWidth={1.75} />
-                    {item.label}
+                    <span className="flex-1">{item.label}</span>
+                    {locked && (
+                      <Lock
+                        size={12}
+                        strokeWidth={2}
+                        style={{
+                          color: active
+                            ? "var(--sidebar-primary-foreground)"
+                            : "var(--muted-foreground)",
+                        }}
+                        aria-label="Locked"
+                      />
+                    )}
                   </Link>
                 );
               })}

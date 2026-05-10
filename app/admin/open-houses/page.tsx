@@ -3,6 +3,8 @@ import Link from "next/link";
 import { ArrowLeft, Plus, ExternalLink, Pencil, Calendar } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
+import { tenantHasFeature } from "@/lib/features";
+import { UpgradeBanner } from "@/components/admin/UpgradeBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +14,25 @@ export default async function OpenHousesAdminPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
+
+  // Open-house landing pages + printable flyers ship with the
+  // Marketing plan. Without `flyers` unlocked, hide the listing and
+  // funnel customers to the upgrade banner.
+  if (!(await tenantHasFeature("flyers"))) {
+    return (
+      <AdminShell user={{ email: user.email ?? "" }}>
+        <div className="max-w-5xl mx-auto px-5 md:px-8 py-8 md:py-12">
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-1.5 text-xs text-ink/55 hover:text-ink mb-6"
+          >
+            <ArrowLeft size={14} /> Back to Site Editor
+          </Link>
+          <UpgradeBanner feature="flyers" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   const { data: rows } = await supabase
     .from("open_houses")

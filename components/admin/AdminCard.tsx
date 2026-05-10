@@ -28,7 +28,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRight, type LucideIcon } from "lucide-react";
+import { ArrowRight, Lock, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AdminCardVisual, type AdminCardVariant } from "./AdminCardVisuals";
 
@@ -48,6 +48,14 @@ interface AdminCardProps {
   /** Optional accent color hex. Defaults to the theme's --primary. */
   accent?: string;
   className?: string;
+  /**
+   * If true, the card renders with a "Locked" overlay chip + slight
+   * dim. The link still works — clicking it routes to the gated page,
+   * which in turn shows the upgrade banner. We intentionally don't
+   * disable the click so customers can click through and read the
+   * unlock pitch.
+   */
+  locked?: boolean;
 }
 
 export default function AdminCard({
@@ -59,6 +67,7 @@ export default function AdminCard({
   badge,
   accent,
   className,
+  locked = false,
 }: AdminCardProps) {
   const accentVar = accent ?? "var(--primary)";
 
@@ -73,8 +82,30 @@ export default function AdminCard({
         "hover:shadow-lg",
         className,
       )}
-      style={{ color: "var(--card-foreground)" }}
+      style={{
+        color: "var(--card-foreground)",
+        ...(locked ? { opacity: 0.78 } : {}),
+      }}
+      title={
+        locked
+          ? `${title} — locked. Open to see how to unlock.`
+          : undefined
+      }
     >
+      {locked && (
+        <span
+          className="absolute right-3 top-3 z-[7] inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] backdrop-blur-sm"
+          style={{
+            borderColor: "color-mix(in srgb, var(--foreground) 18%, transparent)",
+            background: "color-mix(in srgb, var(--card) 70%, transparent)",
+            color: "var(--muted-foreground)",
+            fontWeight: 600,
+          }}
+        >
+          <Lock size={9} strokeWidth={2} />
+          Locked
+        </span>
+      )}
       {/* ── Visual zone ────────────────────────────────────────── */}
       <div
         className="relative h-[140px] overflow-hidden"
@@ -155,8 +186,9 @@ export default function AdminCard({
           <Icon size={22} strokeWidth={1.6} />
         </div>
 
-        {/* Corner badge — fades out on hover */}
-        {badge && (
+        {/* Corner badge — fades out on hover. Suppressed when the card
+            is locked so the "Locked" chip can sit in this slot alone. */}
+        {badge && !locked && (
           <span
             className="absolute right-3 top-3 z-[5] inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] backdrop-blur-sm transition-opacity duration-300 group-hover/animated-card:opacity-0"
             style={{

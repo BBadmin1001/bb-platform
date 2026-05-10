@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
 import CountyLandingForm from "@/components/admin/seo/CountyLandingForm";
 import type { LibraryItem } from "@/components/admin/media/ImagePicker";
+import { tenantHasFeature } from "@/lib/features";
+import { UpgradeBanner } from "@/components/admin/UpgradeBanner";
 
 export default async function EditCountyLandingPage({
   params,
@@ -17,6 +19,23 @@ export default async function EditCountyLandingPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
+
+  if (!(await tenantHasFeature("seo_county_pages"))) {
+    return (
+      <AdminShell user={{ email: user.email ?? "" }}>
+        <div className="max-w-3xl mx-auto py-8">
+          <Link
+            href="/admin/seo"
+            className="inline-flex items-center gap-1.5 text-xs mb-6"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            <ArrowLeft size={14} /> Back to SEO
+          </Link>
+          <UpgradeBanner feature="seo_county_pages" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   // Fetch the row + media library in parallel.
   const [{ data: row }, { data: media }] = await Promise.all([

@@ -12,6 +12,8 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
 import { listAllCountyLandingRows } from "@/lib/countyLandingLoader";
+import { tenantHasFeature } from "@/lib/features";
+import { UpgradeBanner } from "@/components/admin/UpgradeBanner";
 
 export default async function SeoCountiesPage() {
   const supabase = await createClient();
@@ -19,6 +21,25 @@ export default async function SeoCountiesPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
+
+  // Same gate as /admin/seo — hide the editor entirely for tenants
+  // without the seo_county_pages feature unlocked.
+  if (!(await tenantHasFeature("seo_county_pages"))) {
+    return (
+      <AdminShell user={{ email: user.email ?? "" }}>
+        <div className="max-w-4xl mx-auto py-8">
+          <Link
+            href="/admin/seo"
+            className="inline-flex items-center gap-1.5 text-xs mb-6"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            <ArrowLeft size={14} /> Back to SEO
+          </Link>
+          <UpgradeBanner feature="seo_county_pages" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   const rows = await listAllCountyLandingRows();
   const liveCount = rows.filter((r) => r.isPublished).length;

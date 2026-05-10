@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
 import GoogleIntegrationWizard from "@/components/admin/integrations/GoogleIntegrationWizard";
 import { getGoogleIntegration } from "@/lib/integrationStore";
+import { tenantHasFeature } from "@/lib/features";
+import { UpgradeBanner } from "@/components/admin/UpgradeBanner";
 
 export default async function GoogleIntegrationPage() {
   const supabase = await createClient();
@@ -12,6 +14,26 @@ export default async function GoogleIntegrationPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
+
+  // Google Reviews widget is gated behind the Marketing plan. Without
+  // that feature unlocked there's no point showing the wizard — it
+  // wouldn't actually render the widget on the public site.
+  if (!(await tenantHasFeature("google_reviews_widget"))) {
+    return (
+      <AdminShell user={{ email: user.email ?? "" }}>
+        <div className="max-w-3xl mx-auto py-8">
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-1.5 text-xs mb-6"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            <ArrowLeft size={14} /> Back to Site Editor
+          </Link>
+          <UpgradeBanner feature="google_reviews_widget" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   const integration = await getGoogleIntegration();
   const existing = integration

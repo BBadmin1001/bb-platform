@@ -21,6 +21,8 @@ import {
 // Variants are content-aware: palette swatches for brand, growing houses
 // for communities, ticking checkmarks for closings, etc.
 import type { AdminCardVariant } from "@/components/admin/AdminCardVisuals";
+import { getCurrentTenantFeatures } from "@/lib/features";
+import type { FeatureName } from "@/lib/features-meta";
 
 const editorSections: Array<{
   href: string;
@@ -30,6 +32,10 @@ const editorSections: Array<{
   accent: string;
   badge: string;
   variant: AdminCardVariant;
+  /** When set, the card renders with a Locked chip if the tenant
+   *  hasn't unlocked this feature. Card still routes to the page,
+   *  which itself shows the upgrade banner. */
+  feature?: FeatureName;
 }> = [
   {
     href: "/admin/brand",
@@ -86,6 +92,7 @@ const editorSections: Array<{
     accent: "#388e3c",
     badge: "Listings",
     variant: "door",
+    feature: "flyers",
   },
   {
     href: "/admin/reviews",
@@ -123,6 +130,7 @@ const editorSections: Array<{
     accent: "#2e7d32",
     badge: "Connect",
     variant: "plug",
+    feature: "google_reviews_widget",
   },
   {
     href: "/admin/analytics",
@@ -133,6 +141,7 @@ const editorSections: Array<{
     accent: "#388e3c",
     badge: "Insights",
     variant: "chart",
+    feature: "analytics",
   },
   {
     href: "/admin/seo",
@@ -143,6 +152,7 @@ const editorSections: Array<{
     accent: "#1b5e20",
     badge: "Visibility",
     variant: "search",
+    feature: "seo_county_pages",
   },
 ];
 
@@ -164,6 +174,12 @@ export default async function AdminDashboard({
     const from = (await searchParams)?.from;
     return <AdminLoginForm from={from} />;
   }
+
+  // Pull the unlocked feature set so dashboard cards can show a
+  // "Locked" chip + dim for features the tenant hasn't paid for.
+  // Cards still route to the gated page (which shows the upgrade
+  // banner) — we don't disable the click.
+  const unlocked = await getCurrentTenantFeatures();
 
   return (
     <AdminShell user={{ email: user.email ?? "" }}>
@@ -198,6 +214,7 @@ export default async function AdminDashboard({
               badge={s.badge}
               accent={s.accent}
               variant={s.variant}
+              locked={s.feature ? !unlocked.has(s.feature) : false}
             />
           ))}
         </div>

@@ -8,6 +8,7 @@ import {
   removeNetlifyAlias,
   isNetlifyConfigured,
 } from "@/lib/netlify";
+import { reconcileTenantFeatures } from "@/lib/features";
 
 export type TenantInput = {
   slug: string;
@@ -254,6 +255,31 @@ export async function promoteToActive(slug: string): Promise<Result> {
   revalidatePath("/master/tenants");
   revalidatePath(`/master/tenants/${slug}`);
   return { ok: true };
+}
+
+/**
+ * Recompute this tenant's features cache from their active
+ * subscriptions. Normally fires automatically when Stripe webhooks
+ * deliver — this is the manual button for cases where a subscription
+ * state change didn't (network blip, webhook secret missing, etc.)
+ * propagated.
+ */
+export async function resyncTenantFeatures(
+  slug: string,
+): Promise<Result & { features?: string[] }> {
+  const { supabase } = await requireSuperAdmin();
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!tenant) return { ok: false, error: "Tenant not found." };
+  const res = await reconcileTenantFeatures(tenant.id);
+  if (!res.ok) return { ok: false, error: res.error };
+
+  revalidatePath(`/master/tenants/${slug}`);
+  revalidatePath("/master/tenants");
+  return { ok: true, slug, features: res.features };
 }
 
 /**

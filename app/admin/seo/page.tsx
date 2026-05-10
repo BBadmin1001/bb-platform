@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
+import { tenantHasFeature } from "@/lib/features";
+import { UpgradeBanner } from "@/components/admin/UpgradeBanner";
 
 /**
  * SEO hub — overview of every SEO-related editor / report.
@@ -33,6 +35,27 @@ export default async function SeoHubPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
+
+  // Hard-gate on the SEO county pages feature. Tenants on the
+  // Visibility plan get full access; everyone else sees the upgrade
+  // card and we skip the DB stats query entirely (no point).
+  const hasSeo = await tenantHasFeature("seo_county_pages");
+  if (!hasSeo) {
+    return (
+      <AdminShell user={{ email: user.email ?? "" }}>
+        <div className="max-w-5xl mx-auto py-8">
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-1.5 text-xs mb-6"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            <ArrowLeft size={14} /> Back to Site Editor
+          </Link>
+          <UpgradeBanner feature="seo_county_pages" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   // Quick-stats pulled from the DB so the cards can show live numbers.
   const [{ data: countyRows }, { data: missingAlt }] = await Promise.all([

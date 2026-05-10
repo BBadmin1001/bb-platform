@@ -13,6 +13,8 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
 import { getAnalyticsIntegration } from "@/lib/integrationStore";
+import { tenantHasFeature } from "@/lib/features";
+import { UpgradeBanner } from "@/components/admin/UpgradeBanner";
 
 /**
  * Website Analytics dashboard.
@@ -28,6 +30,27 @@ export default async function AnalyticsPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
+
+  // Hard-gate: tenants without the `analytics` feature unlocked see
+  // only the upgrade banner — the GA setup controls are hidden until
+  // they're on the Visibility plan. The banner explains how to unlock.
+  const hasAnalytics = await tenantHasFeature("analytics");
+  if (!hasAnalytics) {
+    return (
+      <AdminShell user={{ email: user.email ?? "" }}>
+        <div className="max-w-5xl mx-auto py-8">
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-1.5 text-xs mb-6"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            <ArrowLeft size={14} /> Back to Site Editor
+          </Link>
+          <UpgradeBanner feature="analytics" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   const integration = await getAnalyticsIntegration();
   const isConnected = Boolean(integration?.enabled && integration.config?.measurementId);

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyWebhook, getStripe } from "@/lib/stripe";
+import { reconcileTenantFeatures } from "@/lib/features";
 import type Stripe from "stripe";
 
 /**
@@ -176,32 +177,40 @@ async function handleSubscriptionChange(event: Stripe.Event) {
         canceled_at: new Date().toISOString(),
       })
       .eq("stripe_subscription_id", sub.id);
-    return;
+  } else {
+    // upsert
+    // In recent Stripe API versions `current_period_end` moved from the
+    // subscription onto each subscription item (one billing period per
+    // item). For our single-item subs, the first item's period is the
+    // one to record.
+    const firstItemPeriodEnd = sub.items.data[0]?.current_period_end;
+    const periodEndIso = firstItemPeriodEnd
+      ? new Date(firstItemPeriodEnd * 1000).toISOString()
+      : null;
+
+    await supabase.from("tenant_subscriptions").upsert(
+      {
+        tenant_id: prospect.tenant_id,
+        plan_id: plan.id,
+        stripe_subscription_id: sub.id,
+        status: sub.status as
+          | "active"
+          | "trialing"
+          | "past_due"
+          | "canceled"
+          | "incomplete"
+          | "incomplete_expired"
+          | "unpaid"
+          | "paused",
+        current_period_end: periodEndIso,
+      },
+      { onConflict: "stripe_subscription_id" },
+    );
   }
 
-  // upsert
-  const periodEndIso = sub.current_period_end
-    ? new Date(sub.current_period_end * 1000).toISOString()
-    : null;
-
-  await supabase.from("tenant_subscriptions").upsert(
-    {
-      tenant_id: prospect.tenant_id,
-      plan_id: plan.id,
-      stripe_subscription_id: sub.id,
-      status: sub.status as
-        | "active"
-        | "trialing"
-        | "past_due"
-        | "canceled"
-        | "incomplete"
-        | "incomplete_expired"
-        | "unpaid"
-        | "paused",
-      current_period_end: periodEndIso,
-    },
-    { onConflict: "stripe_subscription_id" },
-  );
+  // Recompute the tenant's feature flags so admin/public UI flips
+  // immediately on subscription state change.
+  await reconcileTenantFeatures(prospect.tenant_id);
 }
 
 /**
