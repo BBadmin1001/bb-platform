@@ -1,0 +1,293 @@
+/* ============================================================
+   Admin panel theme — green/sky/slate token system, light + dark.
+   Scoped to .admin-root so the marketing site is unaffected.
+   ============================================================ */
+
+.admin-root {
+  /* ── light mode (default) — warm earth palette with forest-green accents ── */
+  --card: #f8f5f0;
+  --ring: #2e7d32;
+  --input: #e0d6c9;
+  --muted: #f0e9e0;
+  --accent: #c8e6c9;
+  --border: #e0d6c9;
+  --radius: 0.5rem;
+  --chart-1: #4caf50;
+  --chart-2: #388e3c;
+  --chart-3: #2e7d32;
+  --chart-4: #1b5e20;
+  --chart-5: #0a1f0c;
+  --popover: #f8f5f0;
+  --primary: #2e7d32;
+  --sidebar: #f0e9e0;
+  --secondary: #e8f5e9;
+  --background: #f8f5f0;
+  --foreground: #3e2723;
+  --destructive: #c62828;
+  --sidebar-ring: #2e7d32;
+  --sidebar-accent: #c8e6c9;
+  --sidebar-border: #e0d6c9;
+  --card-foreground: #3e2723;
+  --sidebar-primary: #2e7d32;
+  --muted-foreground: #6d4c41;
+  --accent-foreground: #1b5e20;
+  --popover-foreground: #3e2723;
+  --primary-foreground: #ffffff;
+  --sidebar-foreground: #3e2723;
+  --secondary-foreground: #1b5e20;
+  --destructive-foreground: #ffffff;
+  --sidebar-accent-foreground: #1b5e20;
+  --sidebar-primary-foreground: #ffffff;
+
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-montserrat), system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 14.5px;
+  line-height: 1.55;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ============================================================
+   Admin typography hierarchy — applied to elements within
+   .admin-root so future pages don't need inline fontWeight
+   props. Overrides at the inline-style level still win.
+   ============================================================ */
+
+.admin-root h1 {
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+  color: var(--foreground);
+}
+
+.admin-root h2 {
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.25;
+  color: var(--foreground);
+}
+
+.admin-root h3 {
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.3;
+  color: var(--foreground);
+}
+
+.admin-root p {
+  line-height: 1.6;
+}
+
+/* Slightly tighten tracking on small uppercase eyebrows for legibility */
+.admin-root .uppercase {
+  font-feature-settings: "tnum", "case";
+}
+
+/* Dark mode was removed — single light-mode theme.
+   To restore: re-add an `html[data-admin-theme="dark"] .admin-root { ... }`
+   block here with overridden tokens, and re-add the toggle UI in
+   AdminSidebar.tsx + the pre-paint script in app/admin/layout.tsx.
+   The git history at this commit's parent has the working version. */
+
+/* ── primitives ── */
+
+.admin-card {
+  background: var(--card);
+  color: var(--card-foreground);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow:
+    var(--shadow-offset-x) var(--shadow-offset-y) var(--shadow-blur)
+    var(--shadow-spread) rgba(0, 0, 0, var(--shadow-opacity));
+}
+
+/* `.admin-card-elevated` — used by the animated nav cards on /admin and
+   /admin/brand. Same shape as .admin-card but kept separate so its
+   border-radius / hover shadow can be tuned independently of the smaller
+   utility cards (storage tracker, partner tiles, etc.). */
+.admin-card-elevated {
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  /* border-radius is set by the consumer via Tailwind's `rounded-xl` so the
+     animated nav cards keep their 12px corners; .admin-card uses 8px. */
+}
+
+.admin-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--foreground);
+  transition: border-color 200ms, box-shadow 200ms;
+}
+
+.admin-input:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
+}
+
+.admin-input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.admin-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  margin-bottom: 8px;
+}
+
+.admin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: filter 200ms, transform 200ms;
+}
+.admin-btn:hover {
+  filter: brightness(0.95);
+}
+.admin-btn:active {
+  transform: translateY(1px);
+}
+.admin-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-btn-secondary {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  border-color: var(--border);
+}
+.admin-btn-secondary:hover {
+  filter: brightness(0.97);
+}
+
+.admin-btn-destructive {
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+  border-color: var(--destructive);
+}
+
+.admin-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  color: var(--sidebar-foreground);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 150ms, color 150ms;
+  text-decoration: none;
+}
+
+.admin-tab:hover {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+}
+
+.admin-tab.active {
+  background: var(--sidebar-primary);
+  color: var(--sidebar-primary-foreground);
+}
+
+/* ── helper utilities used inline by admin components ── */
+.admin-bg { background: var(--background); }
+.admin-fg { color: var(--foreground); }
+.admin-muted-fg { color: var(--muted-foreground); }
+.admin-border { border-color: var(--border); }
+.admin-accent-bg { background: var(--accent); }
+.admin-accent-fg { color: var(--accent-foreground); }
+
+/* Token-driven mono font for inline code/numbers */
+.admin-mono { font-family: var(--font-source-code-pro), ui-monospace, monospace; }
+
+/* ============================================================================
+   LEGACY-CLASS REMAP — admin pages were originally written against the
+   marketing site's palette (text-ink, text-navy, bg-cream, border-black/N).
+   Those classes are baked to literal black/cream in tailwind.config.ts and
+   would render as DARK TEXT ON DARK BACKGROUND when the admin flips to
+   dark mode.
+
+   Rather than touch every admin page, we re-target those classes here —
+   scoped to .admin-root so the marketing site is unaffected — and point
+   them at the theme tokens. color-mix() handles the /N opacity variants
+   without using CSS `opacity` (which would cascade to children).
+
+   When new admin code is written, prefer the new tokens directly:
+     • text-ink* → use style={{ color: 'var(--foreground)' }}
+     • text-navy → 'var(--primary)'
+     • bg-cream  → 'var(--background)'
+     • border-*  → 'var(--border)'
+   This block exists for backward compat on existing admin pages.
+   ============================================================================ */
+
+/* ── Backgrounds ── */
+.admin-root .bg-cream             { background-color: var(--background); }
+.admin-root .bg-cream\/95         { background-color: color-mix(in srgb, var(--background) 95%, transparent); }
+.admin-root .bg-cream-soft        { background-color: var(--muted); }
+.admin-root .bg-cream-soft\/40    { background-color: color-mix(in srgb, var(--muted) 40%, transparent); }
+.admin-root .bg-cream-soft\/50    { background-color: color-mix(in srgb, var(--muted) 50%, transparent); }
+.admin-root .bg-navy              { background-color: var(--primary); }
+.admin-root .bg-navy\/90          { background-color: color-mix(in srgb, var(--primary) 90%, transparent); }
+
+/* ── Text — body copy follows --foreground; "navy" links/accents follow --primary ── */
+.admin-root .text-ink             { color: var(--foreground); }
+.admin-root .text-ink\/30         { color: color-mix(in srgb, var(--foreground) 30%, transparent); }
+.admin-root .text-ink\/35         { color: color-mix(in srgb, var(--foreground) 35%, transparent); }
+.admin-root .text-ink\/40         { color: color-mix(in srgb, var(--foreground) 40%, transparent); }
+.admin-root .text-ink\/45         { color: color-mix(in srgb, var(--foreground) 45%, transparent); }
+.admin-root .text-ink\/50         { color: color-mix(in srgb, var(--foreground) 50%, transparent); }
+.admin-root .text-ink\/55         { color: color-mix(in srgb, var(--foreground) 55%, transparent); }
+.admin-root .text-ink\/60         { color: color-mix(in srgb, var(--foreground) 60%, transparent); }
+.admin-root .text-ink\/65         { color: color-mix(in srgb, var(--foreground) 65%, transparent); }
+.admin-root .text-ink\/70         { color: color-mix(in srgb, var(--foreground) 70%, transparent); }
+.admin-root .text-ink\/75         { color: color-mix(in srgb, var(--foreground) 75%, transparent); }
+.admin-root .text-ink\/80         { color: color-mix(in srgb, var(--foreground) 80%, transparent); }
+.admin-root .text-ink\/85         { color: color-mix(in srgb, var(--foreground) 85%, transparent); }
+
+.admin-root .text-navy            { color: var(--primary); }
+.admin-root .text-navy\/40        { color: color-mix(in srgb, var(--primary) 40%, transparent); }
+
+/* ── Borders ── */
+.admin-root .border-navy          { border-color: var(--primary); }
+.admin-root .border-navy\/20      { border-color: color-mix(in srgb, var(--primary) 20%, transparent); }
+.admin-root .border-navy\/30      { border-color: color-mix(in srgb, var(--primary) 30%, transparent); }
+.admin-root .border-navy\/40      { border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
+.admin-root .border-navy\/60      { border-color: color-mix(in srgb, var(--primary) 60%, transparent); }
+
+/* All "subtle divider" variants collapse to --border, which already adapts
+   correctly in light + dark mode. */
+.admin-root .border-black\/8      { border-color: var(--border); }
+.admin-root .border-black\/10     { border-color: var(--border); }
+.admin-root .border-black\/15     { border-color: var(--border); }
+.admin-root .border-black\/40     { border-color: color-mix(in srgb, var(--foreground) 40%, transparent); }
+
+/* ── Card surface — admin pages use .admin-card; the legacy white card
+   pattern via raw classes also gets re-skinned to match ── */
+.admin-root .bg-white             { background-color: var(--card); color: var(--card-foreground); }

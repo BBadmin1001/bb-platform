@@ -21,6 +21,7 @@
 import { useState } from "react";
 import { Menu as MenuIcon } from "lucide-react";
 import AdminSidebar from "./AdminSidebar";
+import { useAdminLayout } from "./AdminLayoutProvider";
 
 export default function AdminShell({
   user,
@@ -29,6 +30,7 @@ export default function AdminShell({
   user: { email: string };
   children: React.ReactNode;
 }) {
+  const { realtorName } = useAdminLayout();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -79,7 +81,7 @@ export default function AdminShell({
             className="ml-3 text-sm"
             style={{ fontWeight: 600, letterSpacing: "0.02em" }}
           >
-            Samina Bilal · Admin
+            {realtorName ? `${realtorName} · Admin` : "Admin"}
           </span>
         </header>
 

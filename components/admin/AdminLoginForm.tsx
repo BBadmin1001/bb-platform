@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useAdminLayout } from "./AdminLayoutProvider";
 
 export default function AdminLoginForm({ from }: { from?: string }) {
+  const { realtorName } = useAdminLayout();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,7 +47,7 @@ export default function AdminLoginForm({ from }: { from?: string }) {
           className="text-2xl mb-2 text-ink"
           style={{ fontWeight: 600, letterSpacing: "0.01em" }}
         >
-          Samina&nbsp;Bilal · Admin
+          {realtorName ? `${realtorName} · Admin` : "Admin"}
         </h1>
         <p className="text-sm text-ink/60 mb-10" style={{ fontWeight: 400 }}>
           Sign in to manage your website.
