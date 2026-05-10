@@ -55,9 +55,15 @@ export default async function MasterLeads() {
       ) : (
         <div className="space-y-2">
           {(leads ?? []).map((lead) => {
-            const t = lead.tenant as
+            // Supabase widens nested selects to arrays even for
+            // many-to-one relations. Normalise + cast through unknown
+            // since the generated type doesn't match the runtime
+            // shape of `tenant:tenant_id ( slug, realtor_name )`.
+            const tRaw = lead.tenant as unknown as
               | { slug: string; realtor_name: string }
+              | { slug: string; realtor_name: string }[]
               | null;
+            const t = Array.isArray(tRaw) ? tRaw[0] ?? null : tRaw;
             const pill = STATUS_PILL[lead.status] ?? STATUS_PILL.closed;
             return (
               <div

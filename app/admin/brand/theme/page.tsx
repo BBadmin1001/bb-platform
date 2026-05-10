@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
 import ThemeEditor from "@/components/admin/brand/ThemeEditor";
-import { getBrandTheme } from "@/lib/brandTheme";
+import { getBrandTheme } from "@/lib/brandTheme.server";
 
 export default async function BrandThemePage() {
   const supabase = await createClient();

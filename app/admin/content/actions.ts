@@ -19,11 +19,9 @@ export async function saveSection(
   key: string,
   valueJson: string,
 ): Promise<ActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const auth = await requireTenantUser();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const { supabase, tenantId, user } = auth;
 
   // Validate JSON shape — block obvious garbage
   try {
@@ -32,12 +30,20 @@ export async function saveSection(
     return { ok: false, error: "Invalid JSON payload." };
   }
 
-  // 1. Upsert the block
+  // 1. Upsert the block — scoped by tenant. Conflict target matches
+  // the unique (tenant_id, page, key) constraint on content_blocks.
   const { data: block, error: upsertErr } = await supabase
     .from("content_blocks")
     .upsert(
-      { page, key, value: valueJson, updated_by: user.id, updated_at: new Date().toISOString() },
-      { onConflict: "page,key" },
+      {
+        tenant_id: tenantId,
+        page,
+        key,
+        value: valueJson,
+        updated_by: user.id,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "tenant_id,page,key" },
     )
     .select("id")
     .single();
@@ -63,16 +69,15 @@ export async function saveSection(
 }
 
 export async function restoreFromHistory(historyId: string): Promise<ActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const auth = await requireTenantUser();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const { supabase, tenantId } = auth;
 
   const { data: hist, error: histErr } = await supabase
     .from("content_history")
     .select("page,key,value")
     .eq("id", historyId)
+    .eq("tenant_id", tenantId)
     .single();
 
   if (histErr || !hist) {

@@ -33,7 +33,7 @@ export async function createClosing(input: ClosingInput): Promise<Result> {
 
   const { error } = await supabase
     .from("closings")
-    .insert({ tenant_id: tenantId, tenant_id: tenantId, ...input, display_order: nextOrder });
+    .insert({ tenant_id: tenantId, ...input, display_order: nextOrder });
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/closings");

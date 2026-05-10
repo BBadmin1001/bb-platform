@@ -25,8 +25,10 @@
  *   deriveSurfaceSoft()   — surface − 4% lightness
  */
 
-import { getServiceClient } from "./contentLoader";
-import { getCurrentTenantId } from "./tenant/context";
+// IMPORTANT: this module is imported by client components (the admin
+// theme editor), so it must NOT pull `server-only`-marked modules.
+// The async server loader lives in `./brandTheme.server.ts` and re-uses
+// the types/constants exported here.
 
 export type BrandTheme = {
   /** Hex color, e.g. "#142840". Default = navy from the original palette. */
@@ -125,32 +127,6 @@ export const deriveDarker = (hex: string) => mixWithBlack(hex, 0.22);
 export const deriveLighter = (hex: string) => mixWithWhite(hex, 0.28);
 export const deriveSurfaceSoft = (hex: string) => mixWithBlack(hex, 0.04);
 
-/**
- * Returns the saved brand theme, or DEFAULT_BRAND_THEME when nothing is
- * persisted yet (or Supabase isn't configured).
- */
-export async function getBrandTheme(): Promise<BrandTheme> {
-  try {
-    const supabase = getServiceClient();
-    if (!supabase) return DEFAULT_BRAND_THEME;
-    const tenantId = await getCurrentTenantId();
-    if (!tenantId) return DEFAULT_BRAND_THEME;
-    const { data } = await supabase
-      .from("content_blocks")
-      .select("value")
-      .eq("tenant_id", tenantId)
-      .eq("page", "brand")
-      .eq("key", "theme")
-      .maybeSingle();
-    if (!data?.value) return DEFAULT_BRAND_THEME;
-    const parsed = JSON.parse(data.value) as Partial<BrandTheme>;
-    return {
-      primary: parsed.primary || DEFAULT_BRAND_THEME.primary,
-      surface: parsed.surface || DEFAULT_BRAND_THEME.surface,
-      primaryGradient: parsed.primaryGradient || "",
-      surfaceGradient: parsed.surfaceGradient || "",
-    };
-  } catch {
-    return DEFAULT_BRAND_THEME;
-  }
-}
+// `getBrandTheme()` lives in `./brandTheme.server.ts` — server-only
+// because it touches Supabase + tenant resolution. Server callers
+// should import it from there directly.

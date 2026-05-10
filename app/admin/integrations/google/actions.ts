@@ -9,12 +9,12 @@
  *   saveGoogleIntegration(apiKey, placeId) — persists creds + runs first sync.
  *   disconnectGoogle()                     — clears creds + disables.
  *   syncGoogleReviewsNow()                 — runs the sync immediately.
- *                                            Also exported for the cron handler.
+ *                                            Tenant-scoped — pulls + writes
+ *                                            against the current tenant only.
  */
 
 import { revalidatePath } from "next/cache";
-import { createClient as createServerClient } from "@/lib/supabase/server";
-import { getServiceClient } from "@/lib/contentLoader";
+import { requireTenantUser } from "@/lib/auth";
 import {
   fetchPlaceWithReviews,
   GooglePlacesError,
@@ -25,12 +25,6 @@ import { getGoogleIntegration } from "@/lib/integrationStore";
 type ActionResult<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
-
-async function requireUser() {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return { supabase, user };
-}
 
 // ─────────────────────── 1. Test connection ─────────────────────
 
@@ -45,8 +39,8 @@ export async function testGoogleConnection(
     sample: { author: string; rating: number; text: string }[];
   }>
 > {
-  const { user } = await requireUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const auth = await requireTenantUser();
+  if (!auth.ok) return { ok: false, error: auth.error };
   if (!apiKey?.trim()) return { ok: false, error: "Paste your Google API key." };
   if (!placeId?.trim()) return { ok: false, error: "Paste your Place ID." };
 
@@ -81,7 +75,7 @@ export async function saveGoogleIntegration(
 ): Promise<ActionResult<{ syncedCount: number }>> {
   const auth = await requireTenantUser();
   if (!auth.ok) return { ok: false, error: auth.error };
-  const { supabase, tenantId } = auth;
+  const { supabase, tenantId, user } = auth;
   if (!apiKey?.trim()) return { ok: false, error: "API key is required." };
   if (!placeId?.trim()) return { ok: false, error: "Place ID is required." };
 
@@ -91,6 +85,7 @@ export async function saveGoogleIntegration(
 
   const { error } = await supabase.from("integrations").upsert(
     {
+      tenant_id: tenantId,
       key: "google_places",
       config: {
         apiKey: apiKey.trim(),
@@ -101,7 +96,7 @@ export async function saveGoogleIntegration(
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "key" },
+    { onConflict: "tenant_id,key" },
   );
   if (error) return { ok: false, error: `Couldn't save: ${error.message}` };
 
@@ -125,11 +120,16 @@ export async function saveGoogleIntegration(
 export async function disconnectGoogle(): Promise<ActionResult> {
   const auth = await requireTenantUser();
   if (!auth.ok) return { ok: false, error: auth.error };
-  const { supabase, tenantId } = auth;
+  const { supabase, tenantId, user } = auth;
 
   const { error } = await supabase
     .from("integrations")
-    .update({ enabled: false, updated_by: user.id, updated_at: new Date().toISOString() })
+    .update({
+      enabled: false,
+      updated_by: user.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("tenant_id", tenantId)
     .eq("key", "google_places");
   if (error) return { ok: false, error: error.message };
 
@@ -149,19 +149,22 @@ export async function disconnectGoogle(): Promise<ActionResult> {
  *
  * Returns { synced: <newly-inserted count>, total: <reviews seen> } so the
  * wizard + manual "Sync now" button can show feedback.
+ *
+ * NOTE: tenant-scoped via the cookie session. The cron handler (when
+ * we add one) will need a separate service-role variant that takes
+ * tenantId as a parameter.
  */
 export async function syncGoogleReviewsNow(): Promise<
   ActionResult<{ synced: number; total: number }>
 > {
+  const auth = await requireTenantUser();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const { supabase, tenantId } = auth;
+
   const integration = await getGoogleIntegration();
   if (!integration?.enabled || !integration.config?.apiKey || !integration.config?.placeId) {
     return { ok: false, error: "Google is not connected." };
   }
-
-  // Use service-role client so cron handlers (which run unauthenticated)
-  // can also call this same function.
-  const supabase = getServiceClient();
-  if (!supabase) return { ok: false, error: "Database client not configured." };
 
   let place;
   try {
@@ -179,22 +182,25 @@ export async function syncGoogleReviewsNow(): Promise<
         last_sync_error: msg,
         last_synced_at: new Date().toISOString(),
       })
+      .eq("tenant_id", tenantId)
       .eq("key", "google_places");
     return { ok: false, error: msg };
   }
 
   const newReviews: NormalizedGoogleReview[] = place.reviews;
 
-  // Dedupe — pull existing external_ids in one query
+  // Dedupe — pull existing external_ids for THIS tenant in one query
   const { data: existing } = await supabase
     .from("reviews")
     .select("external_id")
+    .eq("tenant_id", tenantId)
     .eq("source", "google");
   const seen = new Set((existing ?? []).map((r) => r.external_id).filter(Boolean));
 
   const toInsert = newReviews
     .filter((r) => !seen.has(r.externalId))
     .map((r) => ({
+      tenant_id: tenantId,
       source: "google" as const,
       external_id: r.externalId,
       author_name: r.authorName,
@@ -217,6 +223,7 @@ export async function syncGoogleReviewsNow(): Promise<
           last_sync_error: error.message,
           last_synced_at: new Date().toISOString(),
         })
+        .eq("tenant_id", tenantId)
         .eq("key", "google_places");
       return { ok: false, error: `DB insert failed: ${error.message}` };
     }
@@ -231,6 +238,7 @@ export async function syncGoogleReviewsNow(): Promise<
       last_sync_error: null,
       last_synced_at: new Date().toISOString(),
     })
+    .eq("tenant_id", tenantId)
     .eq("key", "google_places");
 
   revalidatePath("/admin/reviews");

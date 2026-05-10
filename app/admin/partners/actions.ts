@@ -29,7 +29,7 @@ export async function createCategory(input: {
 
   const { data, error } = await supabase
     .from("partner_categories")
-    .insert({ tenant_id: tenantId, tenant_id: tenantId, ...input, display_order: nextOrder, is_visible: true })
+    .insert({ tenant_id: tenantId, ...input, display_order: nextOrder, is_visible: true })
     .select("id")
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? "Insert failed." };
@@ -128,7 +128,7 @@ export async function createPartner(input: PartnerFormInput): Promise<Result> {
 
   const { error } = await supabase
     .from("partners")
-    .insert({ tenant_id: tenantId, tenant_id: tenantId, ...input, display_order: nextOrder });
+    .insert({ tenant_id: tenantId, ...input, display_order: nextOrder });
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/partners");

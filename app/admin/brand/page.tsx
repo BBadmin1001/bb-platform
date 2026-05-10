@@ -13,7 +13,8 @@ import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
 import AdminCard from "@/components/admin/AdminCard";
 import type { AdminCardVariant } from "@/components/admin/AdminCardVisuals";
-import { getBrandTheme, DEFAULT_BRAND_THEME } from "@/lib/brandTheme";
+import { DEFAULT_BRAND_THEME } from "@/lib/brandTheme";
+import { getBrandTheme } from "@/lib/brandTheme.server";
 
 /**
  * Brand Identity dashboard.

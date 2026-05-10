@@ -21,8 +21,10 @@ export function getStripe(): Stripe {
     );
   }
   _client = new Stripe(key, {
-    // Pin to a current API version so behaviour doesn't drift.
-    apiVersion: "2025-09-30.clover" as unknown as Stripe.LatestApiVersion,
+    // No explicit apiVersion — the SDK pins to its bundled latest
+    // (currently "2026-04-22.dahlia"), which matches our type
+    // surface. Stripe's API is backwards-compatible across pins, so
+    // letting the SDK choose avoids a type-cast every time we bump.
     // Better diagnostics + retries on transient failures.
     maxNetworkRetries: 2,
     typescript: true,

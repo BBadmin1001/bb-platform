@@ -13,13 +13,13 @@
  */
 
 import {
-  getBrandTheme,
   hexToRgbTriplet,
   deriveDarker,
   deriveLighter,
   deriveSurfaceSoft,
   DEFAULT_BRAND_THEME,
 } from "@/lib/brandTheme";
+import { getBrandTheme } from "@/lib/brandTheme.server";
 
 export default async function BrandThemeStyle() {
   const theme = await getBrandTheme();

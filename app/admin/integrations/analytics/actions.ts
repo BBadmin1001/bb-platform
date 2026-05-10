@@ -13,24 +13,18 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { createClient as createServerClient } from "@/lib/supabase/server";
+import { requireTenantUser } from "@/lib/auth";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
 const MEASUREMENT_ID_RE = /^G-[A-Z0-9]{6,}$/;
-
-async function requireUser() {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return { supabase, user };
-}
 
 export async function saveAnalyticsIntegration(
   measurementId: string,
 ): Promise<ActionResult> {
   const auth = await requireTenantUser();
   if (!auth.ok) return { ok: false, error: auth.error };
-  const { supabase, tenantId } = auth;
+  const { supabase, tenantId, user } = auth;
 
   const id = measurementId?.trim() ?? "";
   if (!id) return { ok: false, error: "Paste your GA4 Measurement ID." };
@@ -43,13 +37,14 @@ export async function saveAnalyticsIntegration(
 
   const { error } = await supabase.from("integrations").upsert(
     {
+      tenant_id: tenantId,
       key: "google_analytics",
       config: { measurementId: id },
       enabled: true,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "key" },
+    { onConflict: "tenant_id,key" },
   );
   if (error) return { ok: false, error: `Couldn't save: ${error.message}` };
 
@@ -63,7 +58,7 @@ export async function saveAnalyticsIntegration(
 export async function disconnectAnalytics(): Promise<ActionResult> {
   const auth = await requireTenantUser();
   if (!auth.ok) return { ok: false, error: auth.error };
-  const { supabase, tenantId } = auth;
+  const { supabase, tenantId, user } = auth;
 
   const { error } = await supabase
     .from("integrations")
@@ -72,6 +67,7 @@ export async function disconnectAnalytics(): Promise<ActionResult> {
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     })
+    .eq("tenant_id", tenantId)
     .eq("key", "google_analytics");
   if (error) return { ok: false, error: error.message };
 

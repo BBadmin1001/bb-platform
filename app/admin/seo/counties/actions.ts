@@ -66,17 +66,19 @@ export async function createCountyLanding(
 ): Promise<Result> {
   const auth = await requireTenantUser();
   if (!auth.ok) return { ok: false, error: auth.error };
-  const { supabase, tenantId } = auth;
+  const { supabase, tenantId, user } = auth;
 
   const validationError = validate(input);
   if (validationError) return { ok: false, error: validationError };
 
   const slug = await buildCountySlug(input.county_name, input.state_abbr);
 
-  // Bail if slug already exists (admin can edit the existing one instead)
+  // Bail if slug already exists FOR THIS TENANT — same county can be
+  // a landing page across many tenants, just not within one.
   const { data: existing } = await supabase
     .from("county_landing_pages")
     .select("id")
+    .eq("tenant_id", tenantId)
     .eq("slug", slug)
     .maybeSingle();
   if (existing) {
@@ -115,7 +117,7 @@ export async function updateCountyLanding(
 ): Promise<Result> {
   const auth = await requireTenantUser();
   if (!auth.ok) return { ok: false, error: auth.error };
-  const { supabase, tenantId } = auth;
+  const { supabase, tenantId, user } = auth;
 
   const validationError = validate(input);
   if (validationError) return { ok: false, error: validationError };
@@ -127,6 +129,7 @@ export async function updateCountyLanding(
     const { data: collision } = await supabase
       .from("county_landing_pages")
       .select("id")
+      .eq("tenant_id", tenantId)
       .eq("slug", newSlug)
       .maybeSingle();
     if (collision) {
@@ -154,6 +157,7 @@ export async function updateCountyLanding(
       updated_at: new Date().toISOString(),
       updated_by: user.id,
     })
+    .eq("tenant_id", tenantId)
     .eq("slug", slug);
   if (error) return { ok: false, error: error.message };
 
@@ -168,11 +172,12 @@ export async function updateCountyLanding(
 export async function deleteCountyLanding(slug: string): Promise<Result> {
   const auth = await requireTenantUser();
   if (!auth.ok) return { ok: false, error: auth.error };
-  const { supabase, tenantId } = auth;
+  const { supabase, tenantId, user } = auth;
 
   const { error } = await supabase
     .from("county_landing_pages")
     .delete()
+    .eq("tenant_id", tenantId)
     .eq("slug", slug);
   if (error) return { ok: false, error: error.message };
 
@@ -184,11 +189,12 @@ export async function deleteCountyLanding(slug: string): Promise<Result> {
 export async function togglePublishCounty(slug: string): Promise<Result> {
   const auth = await requireTenantUser();
   if (!auth.ok) return { ok: false, error: auth.error };
-  const { supabase, tenantId } = auth;
+  const { supabase, tenantId, user } = auth;
 
   const { data: existing, error: readErr } = await supabase
     .from("county_landing_pages")
     .select("id, is_published")
+    .eq("tenant_id", tenantId)
     .eq("slug", slug)
     .maybeSingle();
   if (readErr) return { ok: false, error: readErr.message };
@@ -201,7 +207,8 @@ export async function togglePublishCounty(slug: string): Promise<Result> {
       updated_at: new Date().toISOString(),
       updated_by: user.id,
     })
-    .eq("id", existing.id);
+    .eq("id", existing.id)
+    .eq("tenant_id", tenantId);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/seo/counties");

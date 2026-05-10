@@ -13,7 +13,6 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { requireTenantUser } from "@/lib/auth";
 import { parseYouTubeId, youTubeWatchUrl } from "@/lib/cloudinary";
 import {
@@ -31,11 +30,9 @@ export async function saveImageRecord(input: {
   height: number;
   alt?: string;
 }): Promise<Result> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const auth = await requireTenantUser();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const { supabase, tenantId, user } = auth;
 
   const { data, error } = await supabase
     .from("media")
@@ -62,11 +59,9 @@ export async function saveYouTubeRecord(input: {
   url: string;
   alt?: string;
 }): Promise<Result> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const auth = await requireTenantUser();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const { supabase, tenantId, user } = auth;
 
   const id = parseYouTubeId(input.url);
   if (!id) return { ok: false, error: "Couldn't parse a YouTube video ID from that URL." };
@@ -94,16 +89,15 @@ export async function updateMediaAlt(
   id: string,
   alt: string,
 ): Promise<SimpleResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const auth = await requireTenantUser();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const { supabase, tenantId } = auth;
 
   const { error } = await supabase
     .from("media")
     .update({ alt })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("tenant_id", tenantId);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/media");
@@ -112,20 +106,23 @@ export async function updateMediaAlt(
 }
 
 export async function deleteMedia(id: string): Promise<SimpleResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const auth = await requireTenantUser();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const { supabase, tenantId } = auth;
 
   // Look up the public_id + kind so we can free the actual Cloudinary asset.
   const { data: row } = await supabase
     .from("media")
     .select("cloudinary_public_id, kind")
     .eq("id", id)
+    .eq("tenant_id", tenantId)
     .maybeSingle();
 
-  const { error } = await supabase.from("media").delete().eq("id", id);
+  const { error } = await supabase
+    .from("media")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", tenantId);
   if (error) return { ok: false, error: error.message };
 
   // YouTube rows have no Cloudinary asset to clean up.
@@ -144,19 +141,24 @@ export async function deleteMediaMany(
   if (!ids || ids.length === 0) {
     return { ok: false, deleted: 0, failed: 0, error: "Nothing selected." };
   }
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, deleted: 0, failed: ids.length, error: "Not signed in." };
+  const auth = await requireTenantUser();
+  if (!auth.ok) {
+    return { ok: false, deleted: 0, failed: ids.length, error: auth.error };
+  }
+  const { supabase, tenantId } = auth;
 
   // Fetch public_ids before delete so we can free Cloudinary storage after.
   const { data: rows } = await supabase
     .from("media")
     .select("id, cloudinary_public_id, kind")
-    .in("id", ids);
+    .in("id", ids)
+    .eq("tenant_id", tenantId);
 
-  const { error } = await supabase.from("media").delete().in("id", ids);
+  const { error } = await supabase
+    .from("media")
+    .delete()
+    .in("id", ids)
+    .eq("tenant_id", tenantId);
   if (error) {
     return { ok: false, deleted: 0, failed: ids.length, error: error.message };
   }
