@@ -1,0 +1,39 @@
+/* ============================================================
+   Master dashboard theme — re-skins the admin tokens with a
+   deep plum accent so the platform-owner UI is visually distinct
+   from any single tenant's admin panel. Inherits everything else
+   from admin.css; we just override the green-family tokens.
+   ============================================================ */
+
+.master-root {
+  --primary: #5e35b1;            /* deep plum */
+  --sidebar-primary: #5e35b1;
+  --sidebar-ring: #5e35b1;
+  --ring: #5e35b1;
+  --chart-1: #7e57c2;
+  --chart-2: #5e35b1;
+  --chart-3: #4527a0;
+  --chart-4: #311b92;
+  --chart-5: #1a0f4d;
+  --accent: #d1c4e9;
+  --secondary: #ede7f6;
+  --secondary-foreground: #311b92;
+  --accent-foreground: #311b92;
+  --sidebar-accent: #d1c4e9;
+  --sidebar-accent-foreground: #311b92;
+}
+
+.master-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  border-radius: 9999px;
+}

@@ -9,6 +9,7 @@ import { getPortrait, getFeaturedImage } from "@/lib/contentLoader";
 import { getAnalyticsMeasurementId } from "@/lib/integrationStore";
 import { siteOrigin } from "@/lib/qrcode";
 import { getCurrentTenant } from "@/lib/tenant/context";
+import { headers } from "next/headers";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -67,10 +68,18 @@ export default async function RootLayout({
 }) {
   // Fetch portrait + Analytics ID once so children don't refetch.
   // Both are gated by tenant context — no tenant → defaults.
-  const [portrait, gaMeasurementId] = await Promise.all([
+  const [portrait, gaMeasurementId, h] = await Promise.all([
     getPortrait(),
     getAnalyticsMeasurementId(),
+    headers(),
   ]);
+
+  // Skip the public Header/Footer for the admin and master shells —
+  // they own their full-viewport chrome and the public chrome would
+  // double-render at the top of every admin page. proxy.ts stamps
+  // x-pathname on every request so we can read it here.
+  const path = h.get("x-pathname") ?? "";
+  const hideShell = path.startsWith("/admin") || path.startsWith("/master");
 
   return (
     <html lang="en" className={montserrat.variable}>
@@ -96,9 +105,9 @@ export default async function RootLayout({
 
         {/* Per-tenant brand theme — overrides --brand-* CSS variables. */}
         <BrandThemeStyle />
-        <Header portraitAvatar={portrait.avatar} />
+        {!hideShell && <Header portraitAvatar={portrait.avatar} />}
         <main>{children}</main>
-        <Footer portraitAvatar={portrait.avatar} />
+        {!hideShell && <Footer portraitAvatar={portrait.avatar} />}
       </body>
     </html>
   );

@@ -90,6 +90,9 @@ export async function proxy(request: NextRequest) {
     TENANT_SLUG_HEADER,
     ctx.kind === "tenant" ? ctx.tenant.slug : "",
   );
+  // Stamp the request pathname so the root layout can decide whether
+  // to render the public Header/Footer (skipped for /admin and /master).
+  requestHeaders.set("x-pathname", url.pathname);
 
   const path = url.pathname;
   const isAdminPath = path.startsWith("/admin");
