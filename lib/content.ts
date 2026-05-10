@@ -562,6 +562,13 @@ export const content = {
         "How the six markets actually compare today. Sorted by YoY price change — biggest gainers first.",
       sourceNote: "Source: Redfin, March 2026. Updated monthly.",
     },
+    // Optional dark-break section between table and grid. Empty defaults
+    // so the page never crashes on a tenant without this admin-block set.
+    darkBreak: {
+      eyebrow: "",
+      quote: "",
+      attribution: "",
+    },
   },
 
   // -------------------------------------------------------------------------
