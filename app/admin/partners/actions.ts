@@ -202,7 +202,19 @@ export async function seedDefaultPartners(): Promise<Result> {
     if (error || !data) continue;
     inserted++;
 
-    const partners = cat.contacts.map((c, idx) => ({
+    // The default partners list is empty in the multi-tenant build
+    // (per-tenant network only — no platform-level placeholder
+    // contacts). Cast through `unknown` because TS narrows the empty
+    // array literal in lib/content.ts to `never[]`.
+    type PartnerSeed = {
+      name: string;
+      role: string;
+      company: string;
+      phone: string;
+      email: string;
+    };
+    const seedContacts = cat.contacts as unknown as PartnerSeed[];
+    const partners = seedContacts.map((c, idx) => ({
       category_id: data.id,
       name: c.name,
       role: c.role,

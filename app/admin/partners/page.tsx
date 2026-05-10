@@ -107,7 +107,18 @@ async function ensureDefaultsSeeded() {
       .single();
     if (!inserted) continue;
 
-    const partners = cat.contacts.map((c, idx) => ({
+    // Default contacts list is empty for new tenants in the
+    // multi-tenant build. Cast through unknown so TS doesn't narrow
+    // the empty literal to never[].
+    type PartnerSeed = {
+      name: string;
+      role: string;
+      company: string;
+      phone: string;
+      email: string;
+    };
+    const seedContacts = cat.contacts as unknown as PartnerSeed[];
+    const partners = seedContacts.map((c, idx) => ({
       category_id: inserted.id,
       name: c.name,
       role: c.role,

@@ -7,12 +7,19 @@ import { site } from "@/lib/site";
 
 export default function Footer({
   portraitAvatar,
+  realtorName,
+  brokerage,
 }: {
   portraitAvatar?: string;
+  /** Falls back to a neutral wordmark when no tenant in context. */
+  realtorName?: string;
+  brokerage?: string;
 }) {
   const pathname = usePathname();
   const bo = site.brokerageOffice;
   const avatar = portraitAvatar || site.portrait.avatar;
+  const displayName = realtorName?.trim() || "Realtor";
+  const displayBrokerage = brokerage?.trim() || "";
 
   // Hide marketing footer inside the admin panel + on standalone form
   // pages. Open-house pages SHOW the footer on the web view; the
@@ -40,14 +47,16 @@ export default function Footer({
             className="text-[0.7rem] tracking-[0.42em] uppercase text-white/85 mb-2"
             style={{ fontWeight: 300 }}
           >
-            Samina&nbsp;Bilal · Realtor
+            {displayName}&nbsp;· Realtor
           </p>
-          <p
-            className="text-[0.6rem] tracking-[0.32em] uppercase text-white/55 mb-10"
-            style={{ fontWeight: 300 }}
-          >
-            Licensed in Virginia &amp; Maryland
-          </p>
+          {displayBrokerage && (
+            <p
+              className="text-[0.6rem] tracking-[0.32em] uppercase text-white/55 mb-10"
+              style={{ fontWeight: 300 }}
+            >
+              {displayBrokerage}
+            </p>
+          )}
 
           {/* Direct contact */}
           <p
@@ -66,40 +75,27 @@ export default function Footer({
             </a>
           </p>
 
-          {/* Brokerage card — info + large RE/MAX Galaxy logo at the end */}
-          <div className="mt-10 pt-6 border-t border-white/10">
-            <p
-              className="text-[0.65rem] tracking-[0.32em] uppercase text-white/55 mb-3"
-              style={{ fontWeight: 400 }}
-            >
-              Brokerage Office
-            </p>
-            <p
-              className="text-sm font-light text-white/90 leading-[1.75] mb-2"
-              style={{ fontWeight: 300 }}
-            >
-              {bo.name}
-              <br />
-              {bo.street}
-              <br />
-              {bo.cityStateZip}
-            </p>
-            <a
-              href={bo.phoneHref}
-              className="text-sm font-light text-white/85 hover:opacity-70 transition-opacity"
-            >
-              {bo.phone}
-            </a>
-
-            {/* RE/MAX Galaxy logo — displayed at the END of the brokerage info */}
-            <div className="mt-7">
-              <img
-                src="/images/Remax%20Galaxy.png"
-                alt="RE/MAX Galaxy"
-                className="h-20 md:h-24 w-auto object-contain"
-              />
+          {/* Brokerage card — only shows when we actually know the
+              tenant's brokerage. Office address + brokerage logo are
+              tenant-specific data that admin fills in per tenant —
+              the placeholder samina-Galaxy data was deliberately
+              dropped from the multi-tenant default. */}
+          {displayBrokerage && (
+            <div className="mt-10 pt-6 border-t border-white/10">
+              <p
+                className="text-[0.65rem] tracking-[0.32em] uppercase text-white/55 mb-3"
+                style={{ fontWeight: 400 }}
+              >
+                Brokerage
+              </p>
+              <p
+                className="text-sm font-light text-white/90 leading-[1.75] mb-2"
+                style={{ fontWeight: 300 }}
+              >
+                {displayBrokerage}
+              </p>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right — Newsletter */}
@@ -113,8 +109,8 @@ export default function Footer({
           </h3>
           <div className="mb-8 w-12 h-px bg-white/40" />
           <p className="text-base font-light leading-[1.85] text-white/85 mb-8 max-w-md">
-            Quarterly market reports for Northern Virginia &amp; Maryland. New
-            listings, sold prices, and what it means for your zip code. No spam,
+            Quarterly market reports for the area I cover. New listings,
+            sold prices, and what it means for your zip code. No spam,
             ever.
           </p>
 
@@ -154,7 +150,7 @@ export default function Footer({
           {/* Left — copyright + privacy link */}
           <div className="flex flex-wrap items-center gap-3 md:gap-5">
             <span>
-              © {new Date().getFullYear()} Samina Bilal · Licensed in VA &amp; MD
+              © {new Date().getFullYear()} {displayName}
             </span>
             <span className="opacity-60 hidden sm:inline">·</span>
             <Link

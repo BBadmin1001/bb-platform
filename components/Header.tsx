@@ -9,8 +9,12 @@ import MenuDrawer from "./MenuDrawer";
 
 export default function Header({
   portraitAvatar,
+  realtorName,
+  brokerage,
 }: {
   portraitAvatar?: string;
+  realtorName?: string;
+  brokerage?: string;
 }) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
@@ -66,7 +70,11 @@ export default function Header({
         className={`fixed top-0 left-0 right-0 z-30 transition-all duration-500 ease-editorial ${headerClass}`}
       >
         <div className="max-w-[1600px] mx-auto px-6 md:px-12 flex items-center justify-between">
-          <Logo variant={logoVariant} portraitAvatar={portraitAvatar} />
+          <Logo
+            variant={logoVariant}
+            portraitAvatar={portraitAvatar}
+            realtorName={realtorName}
+          />
 
           <div className="flex items-center gap-3 md:gap-6">
             <Link
@@ -91,6 +99,8 @@ export default function Header({
         open={open}
         onClose={() => setOpen(false)}
         portraitAvatar={portraitAvatar}
+        realtorName={realtorName}
+        brokerage={brokerage}
       />
     </>
   );

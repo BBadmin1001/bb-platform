@@ -16,6 +16,83 @@ import { findSection, defaultValueFor } from "./contentRegistry";
 import type { PageKey } from "./contentRegistry";
 import { getCurrentTenantId } from "./tenant/context";
 
+/**
+ * Substitute `{{token}}` placeholders inside any string with values
+ * pulled from the active tenant row. Used to weave the realtor's
+ * actual name/brokerage into default copy so a brand-new tenant
+ * doesn't see "{{realtor_name}}" verbatim or — worse — Samina's name.
+ *
+ * Tokens supported:
+ *   {{realtor_name}}        — full name from tenants.realtor_name
+ *   {{realtor_first_name}}  — first word of realtor_name
+ *   {{brokerage}}           — tenants.brokerage
+ *   {{state_abbr}}          — tenants.state_abbr
+ *
+ * Walks recursively through arrays and objects so nested copy still
+ * gets resolved. Cheap — runs in pure JS on the already-loaded value.
+ */
+let _cachedTokens: { tenantId: string; tokens: Record<string, string> } | null =
+  null;
+
+async function getTenantTokens(
+  tenantId: string | null,
+): Promise<Record<string, string>> {
+  if (!tenantId) return {};
+  if (_cachedTokens && _cachedTokens.tenantId === tenantId) {
+    return _cachedTokens.tokens;
+  }
+  const supabase = getServiceClient();
+  if (!supabase) return {};
+  const { data } = await supabase
+    .from("tenants")
+    .select("realtor_name, brokerage, state_abbr")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (!data) return {};
+
+  const realtorName = (data.realtor_name as string) || "";
+  const firstName = realtorName.split(/\s+/)[0] || realtorName;
+  const tokens: Record<string, string> = {
+    "{{realtor_name}}": realtorName,
+    "{{realtor_first_name}}": firstName,
+    "{{brokerage}}": (data.brokerage as string) || "",
+    "{{state_abbr}}": (data.state_abbr as string) || "",
+  };
+  _cachedTokens = { tenantId, tokens };
+  return tokens;
+}
+
+function applyTokens<T>(value: T, tokens: Record<string, string>): T {
+  if (Object.keys(tokens).length === 0) return value;
+  if (value == null) return value;
+
+  if (typeof value === "string") {
+    // Cast to plain string to avoid TS narrowing `value` to `T &
+    // string` and rejecting reassignment.
+    let out: string = value as string;
+    for (const [token, replacement] of Object.entries(tokens)) {
+      if (out.includes(token)) {
+        out = out.split(token).join(replacement);
+      }
+    }
+    return out as unknown as T;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((v) => applyTokens(v, tokens)) as unknown as T;
+  }
+
+  if (typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = applyTokens(v, tokens);
+    }
+    return out as unknown as T;
+  }
+
+  return value;
+}
+
 let cached: SupabaseClient | null = null;
 
 /**
@@ -42,6 +119,13 @@ export function getServiceClient(): SupabaseClient | null {
 
 /**
  * Read one content section. Returns DB value if present, otherwise defaults.
+ *
+ * The result is run through the tenant-token substitution pass before
+ * being returned, so any `{{realtor_name}}` / `{{brokerage}}` style
+ * placeholders inside the saved value or default copy get resolved
+ * to the active tenant's actual identity. This means a tenant that
+ * hasn't customised a section yet still shows their real name in
+ * place of the placeholder — never another tenant's name.
  */
 export async function getSection<T = unknown>(
   page: PageKey,
@@ -50,11 +134,12 @@ export async function getSection<T = unknown>(
   const def = findSection(page, key);
   const fallback = def ? (defaultValueFor(def) as T) : ({} as T);
 
+  const tenantId = await getCurrentTenantId();
+  const tokens = await getTenantTokens(tenantId);
+
   try {
     const supabase = getServiceClient();
-    if (!supabase) return fallback;
-    const tenantId = await getCurrentTenantId();
-    if (!tenantId) return fallback;
+    if (!supabase || !tenantId) return applyTokens(fallback, tokens);
 
     const { data, error } = await supabase
       .from("content_blocks")
@@ -64,15 +149,15 @@ export async function getSection<T = unknown>(
       .eq("key", key)
       .maybeSingle();
 
-    if (error || !data?.value) return fallback;
+    if (error || !data?.value) return applyTokens(fallback, tokens);
 
     try {
-      return JSON.parse(data.value) as T;
+      return applyTokens(JSON.parse(data.value) as T, tokens);
     } catch {
-      return fallback;
+      return applyTokens(fallback, tokens);
     }
   } catch {
-    return fallback;
+    return applyTokens(fallback, tokens);
   }
 }
 
@@ -89,12 +174,12 @@ export async function getPageContent<T = Record<string, unknown>>(
   const { content: defaults } = await import("./content");
   const baseDefaults = (defaults as Record<string, unknown>)[page] ?? {};
   const result: Record<string, unknown> = JSON.parse(JSON.stringify(baseDefaults));
+  const tenantId = await getCurrentTenantId();
+  const tokens = await getTenantTokens(tenantId);
 
   try {
     const supabase = getServiceClient();
-    if (!supabase) return result as T;
-    const tenantId = await getCurrentTenantId();
-    if (!tenantId) return result as T;
+    if (!supabase || !tenantId) return applyTokens(result, tokens) as T;
 
     const { data, error } = await supabase
       .from("content_blocks")
@@ -102,7 +187,7 @@ export async function getPageContent<T = Record<string, unknown>>(
       .eq("tenant_id", tenantId)
       .eq("page", page);
 
-    if (error || !data) return result as T;
+    if (error || !data) return applyTokens(result, tokens) as T;
 
     for (const row of data as Array<{ key: string; value: string | null }>) {
       if (!row.value) continue;
@@ -137,9 +222,9 @@ export async function getPageContent<T = Record<string, unknown>>(
         // skip unparseable rows — fall back to defaults already in result
       }
     }
-    return result as T;
+    return applyTokens(result, tokens) as T;
   } catch {
-    return result as T;
+    return applyTokens(result, tokens) as T;
   }
 }
 

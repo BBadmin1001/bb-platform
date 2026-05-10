@@ -66,13 +66,21 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Fetch portrait + Analytics ID once so children don't refetch.
-  // Both are gated by tenant context — no tenant → defaults.
-  const [portrait, gaMeasurementId, h] = await Promise.all([
+  // Fetch portrait + Analytics ID + the active tenant once so children
+  // don't refetch. All three are gated by tenant context — no tenant →
+  // defaults / null.
+  const [portrait, gaMeasurementId, h, tenant] = await Promise.all([
     getPortrait(),
     getAnalyticsMeasurementId(),
     headers(),
+    getCurrentTenant(),
   ]);
+
+  // Realtor identity for the public header/footer/logo. Falls back to
+  // sensible neutrals when there's no tenant in context (master URL,
+  // unknown host) so the chrome doesn't render half-broken.
+  const realtorName = tenant?.realtor_name ?? "Realtor";
+  const brokerage = tenant?.brokerage ?? "";
 
   // Skip the public Header/Footer for the admin and master shells —
   // they own their full-viewport chrome and the public chrome would
@@ -109,9 +117,21 @@ export default async function RootLayout({
 
         {/* Per-tenant brand theme — overrides --brand-* CSS variables. */}
         <BrandThemeStyle />
-        {!hideShell && <Header portraitAvatar={portrait.avatar} />}
+        {!hideShell && (
+          <Header
+            portraitAvatar={portrait.avatar}
+            realtorName={realtorName}
+            brokerage={brokerage}
+          />
+        )}
         <main>{children}</main>
-        {!hideShell && <Footer portraitAvatar={portrait.avatar} />}
+        {!hideShell && (
+          <Footer
+            portraitAvatar={portrait.avatar}
+            realtorName={realtorName}
+            brokerage={brokerage}
+          />
+        )}
       </body>
     </html>
   );

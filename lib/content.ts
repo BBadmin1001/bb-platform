@@ -1,20 +1,29 @@
 /**
- * SINGLE SOURCE OF TRUTH for every line of copy on the site.
+ * Default copy for every page on the public site.
  *
- * Want to change a headline, subhead, paragraph, eyebrow, CTA label, stat
- * label, FAQ answer, or footer line? Edit it HERE — every page that reads
- * from this file updates automatically.
+ * This is what a NEW tenant sees before they (or the polish team)
+ * customize anything via the admin panel. It's intentionally generic —
+ * professional-realtor neutral, no specific names, brokerages, or
+ * states baked in.
  *
- * Voice rules (per Samina):
- *   • First person ("I help...") — warm, conversational, never self-claiming
- *     or boastful. No "the best", "elite", "luxury", "exclusive".
- *   • Show luxury through restraint, never by saying it.
- *   • Avoid: hustle, grind, hot deals, let's get it.
- *   • Never call the Path to Ownership program "rent-to-own" or
- *     "credit repair" — both are different (and risky) categories.
- *   • Don't mention years licensed.
- *   • Don't mention Washington D.C. — service area is Virginia & Maryland only.
- *   • IT background — keep very subtle if at all.
+ * Per-tenant identity is woven in via tokens:
+ *
+ *   {{realtor_name}}        → tenants.realtor_name (full name)
+ *   {{realtor_first_name}}  → first word of tenants.realtor_name
+ *   {{brokerage}}           → tenants.brokerage
+ *   {{state_abbr}}          → tenants.state_abbr
+ *
+ * The token replacement happens in `lib/contentLoader.ts` on every
+ * `getSection` / `getPageContent` call. So if a tenant hasn't yet
+ * customized the "About" page, they still see "I'm Jenny Smith — a
+ * Realtor with Compass" instead of placeholder garbage or Samina's
+ * personal bio.
+ *
+ * Voice rules (kept neutral):
+ *   • First person ("I help...") — warm, conversational.
+ *   • Show care through restraint, never by saying it.
+ *   • Avoid: "the best", "elite", "luxury", "exclusive", "hustle", "grind".
+ *   • Don't make up credentials, license numbers, or testimonials.
  */
 
 export const content = {
@@ -22,12 +31,12 @@ export const content = {
   // BRAND
   // -------------------------------------------------------------------------
   brand: {
-    name: "Samina Bilal",
+    name: "{{realtor_name}}",
     role: "Realtor",
-    brokerage: "RE/MAX Galaxy",
+    brokerage: "{{brokerage}}",
     tagline: "Make Yourself at Home",
-    serviceArea: "Northern Virginia & Maryland",
-    languages: ["English", "Urdu", "Hindi"],
+    serviceArea: "Your Local Market",
+    languages: [],
   },
 
   // -------------------------------------------------------------------------
@@ -35,36 +44,36 @@ export const content = {
   // -------------------------------------------------------------------------
   home: {
     hero: {
-      eyebrow: "Northern Virginia · Maryland",
+      eyebrow: "Real Estate, Done Right",
       titleLines: ["Make Yourself", "at Home"],
       subtitle:
-        "Boutique real estate guidance across Virginia and Maryland — with Samina Bilal, RE/MAX Galaxy.",
+        "Boutique real estate guidance — with {{realtor_name}}, {{brokerage}}.",
       ctas: [
         { label: "Explore Communities", href: "/communities", style: "glass" },
         { label: "Path to Ownership", href: "/path-to-ownership", style: "outline" },
       ],
       stats: [
-        { value: 5.0, decimals: 1, suffix: "★", label: "Across Zillow, Google & Realtor.com" },
-        { value: 42, suffix: "+", label: "Five-Star Client Reviews" },
-        { value: 2, label: "States Licensed (VA & MD)" },
+        { value: 5.0, decimals: 1, suffix: "★", label: "Client Reviews" },
+        { value: 0, suffix: "+", label: "Five-Star Client Reviews" },
+        { value: 1, label: "State Licensed" },
       ],
     },
 
-    // The "Meet Samina" intro section with portrait
+    // The "Meet [Realtor]" intro section with portrait
     meet: {
-      eyebrow: "Meet Samina",
+      eyebrow: "Meet {{realtor_first_name}}",
       heading:
         "A boutique approach to one of the biggest decisions you'll ever make.",
       body: [
-        "I'm Samina Bilal — a Realtor with RE/MAX Galaxy, based in Woodbridge and licensed in Virginia and Maryland. I work mostly with first-time buyers, growing families, and clients relocating to the area from out of state or out of country.",
-        "I speak English, Urdu, and Hindi — which has become a quiet strength when working with clients whose families are involved in the decision.",
+        "I'm {{realtor_name}} — a Realtor with {{brokerage}}. I work with first-time buyers, growing families, and clients relocating into the area.",
+        "My approach is calm, transparent, and detail-oriented — because the home you buy or sell shapes the next chapter of your life.",
       ],
       quote:
         "I treat every client the way I'd want to be treated — with patience, clarity, and a real plan.",
-      cta: { label: "About Samina", href: "/about" },
+      cta: { label: "About {{realtor_first_name}}", href: "/about" },
     },
 
-    // The three-card services section (was "Three Ways In" — now clearer)
+    // The three-card services section
     services: {
       eyebrow: "How I Work With Clients",
       heading: "Three ways I help.",
@@ -72,14 +81,14 @@ export const content = {
         {
           title: "Buying",
           body: "First home or fifth — I help you find one that actually fits your timing, your budget, and your life. Showings on your schedule, offers structured to win.",
-          cta: "Buying with Samina",
+          cta: "Buying with {{realtor_first_name}}",
           href: "/buyers",
           imageKey: "buy",
         },
         {
           title: "Selling",
           body: "Pricing it right is everything. I walk your home in person, review real comps in person, and tell you the honest price — not the highest number. Then I market it like it deserves.",
-          cta: "Selling with Samina",
+          cta: "Selling with {{realtor_first_name}}",
           href: "/sellers",
           imageKey: "sell",
         },
@@ -93,28 +102,28 @@ export const content = {
       ],
     },
 
-    // The 6-community grid section
+    // The communities grid section
     communities: {
       eyebrow: "Where I Work Most",
-      heading: "Six neighborhoods I know especially well.",
+      heading: "Neighborhoods I know especially well.",
       subtitle:
-        "Real 2026 market data, written by someone who works these streets every week. (Happy to help you anywhere across Northern Virginia and Maryland — these are just the ones I'm asked about most.)",
+        "Real market data, written by someone who works these streets every week. (Happy to help you anywhere in the area — these are just the ones I'm asked about most.)",
     },
 
     // The Path to Ownership teaser
     pathTeaser: {
       eyebrow: "A Program for Renters",
       heading: "From renting to owning, in 12 to 24 months.",
-      body: "Most renters in Virginia and Maryland believe owning a home is years — or a lifetime — away. With the right plan, most are 12 to 24 months from closing on their first. My Path to Ownership process is built to get you there. No pressure. No guesswork. No cost to start.",
+      body: "Most renters believe owning a home is years — or a lifetime — away. With the right plan, most are 12 to 24 months from closing on their first. My Path to Ownership process is built to get you there. No pressure. No guesswork. No cost to start.",
       cta: { label: "Learn More", href: "/path-to-ownership" },
     },
 
     // The Recent Closings teaser
     closingsTeaser: {
-      eyebrow: "Sold by Samina",
+      eyebrow: "Recent Sales",
       heading: "Recent closings.",
       subtitle:
-        "A glimpse at homes I've helped families buy and sell across Northern Virginia.",
+        "A glimpse at homes I've helped families buy and sell.",
       cta: { label: "See All Closings", href: "/closings" },
     },
 
@@ -133,17 +142,16 @@ export const content = {
   // -------------------------------------------------------------------------
   about: {
     hero: {
-      eyebrow: "Realtor · Virginia & Maryland",
-      titleLines: ["Samina Yunus", "Bilal"],
+      eyebrow: "Realtor",
+      titleLines: ["{{realtor_name}}"],
       subtitle: "A boutique approach to one of the biggest decisions you'll make.",
     },
     bio: {
-      eyebrow: "A Note From Samina",
+      eyebrow: "A Note From {{realtor_first_name}}",
       paragraphs: [
-        "I'm a Realtor with RE/MAX Galaxy, dual-licensed in Virginia and Maryland, based in Woodbridge. I work primarily with first-time buyers, growing families, and clients relocating into the area — locally, from other states, and from abroad.",
-        "I speak English, Urdu, and Hindi. It's helped me serve families where the parents, in-laws, or extended family need to be part of the conversation — which, in my experience, is most of the time.",
-        "Before real estate, I worked in IT — which taught me a healthy obsession with checking the small things, twice. I've carried that into how I handle inspections, contract review, and timelines.",
-        "Beyond traditional buy-and-sell representation, I run a dedicated Path to Ownership process for renters who want to become owners. It's the work I find most meaningful — turning what can feel impossible into a 12-to-24-month plan with a real closing date at the end.",
+        "I'm a Realtor with {{brokerage}}. I work primarily with first-time buyers, growing families, and clients relocating into the area.",
+        "My approach to real estate is calm, transparent, and detail-oriented. Buying or selling a home shapes the next chapter of your life — it deserves a Realtor who treats it that way.",
+        "Beyond traditional buy-and-sell representation, I run a dedicated Path to Ownership process for renters who want to become owners. Turning what can feel impossible into a 12-to-24-month plan with a real closing date.",
       ],
     },
     practiceAreas: {
@@ -168,11 +176,10 @@ export const content = {
       eyebrow: "Credentials",
       heading: "Licensed and affiliated.",
       items: [
-        { label: "Brokerage", value: "RE/MAX Galaxy · Associate" },
-        { label: "Virginia License", value: "#0225256757" },
-        { label: "Maryland License", value: "#[license pending]" },
-        { label: "Languages", value: "English · Urdu · Hindi" },
-        { label: "Service Area", value: "Northern Virginia · Maryland" },
+        { label: "Brokerage", value: "{{brokerage}} · Associate" },
+        { label: "License", value: "[License # — add via admin]" },
+        { label: "Languages", value: "English" },
+        { label: "Service Area", value: "Local market · ask for specifics" },
       ],
     },
     cta: {
@@ -202,7 +209,7 @@ export const content = {
         },
         {
           h: "Local market intelligence",
-          p: "I live and work in Northern Virginia. I know which streets flood, which schools are rezoning, which builders cut corners, and what your offer actually needs to win in your target neighborhood.",
+          p: "I live and work in this market. I know which streets matter, which schools are rezoning, which builders cut corners, and what your offer actually needs to win in your target neighborhood.",
         },
         {
           h: "A vetted network",
@@ -249,7 +256,7 @@ export const content = {
     financing: {
       eyebrow: "Financing",
       heading: "Loan programs worth knowing.",
-      lead: "I work with Virginia and Maryland lenders fluent in every product on this list. Picking the wrong loan can cost you tens of thousands over the life of the mortgage — picking the right one can save the same.",
+      lead: "I work with local lenders fluent in every product on this list. Picking the wrong loan can cost you tens of thousands over the life of the mortgage — picking the right one can save the same.",
       cards: [
         {
           h: "Conventional",
@@ -265,7 +272,7 @@ export const content = {
         },
         {
           h: "Down-Payment Assistance",
-          p: "Virginia and Maryland both run grant and second-lien programs. I'll match your situation to the right one — many buyers leave thousands on the table by not asking.",
+          p: "Many states run grant and second-lien programs. I'll match your situation to the right one — many buyers leave thousands on the table by not asking.",
         },
       ],
     },
@@ -301,7 +308,7 @@ export const content = {
         },
         {
           h: "Marketing that gets shown",
-          p: "Professional photography, social, MLS, and the global RE/MAX network. Your home is staged, shot, written, and placed in front of qualified buyers — not just listed.",
+          p: "Professional photography, social, MLS, and the {{brokerage}} network. Your home is staged, shot, written, and placed in front of qualified buyers — not just listed.",
         },
         {
           h: "Negotiation that protects you",
@@ -331,7 +338,7 @@ export const content = {
         {
           n: "04",
           h: "Launch & Market",
-          p: "Bright MLS, RE/MAX network, social campaigns, broker open house. The first 14 days are everything — I make them count.",
+          p: "MLS, broker network, social campaigns, broker open house. The first 14 days are everything — I make them count.",
         },
         {
           n: "05",
@@ -349,7 +356,7 @@ export const content = {
       eyebrow: "Pricing Strategy",
       heading: "Price right. Sell right.",
       paragraphs: [
-        "The single biggest mistake sellers make is overpricing on day one. The Northern Virginia market punishes mispriced listings — homes that sit longer than 21 days statistically sell for less than comparable homes priced correctly out of the gate.",
+        "The single biggest mistake sellers make is overpricing on day one. The market punishes mispriced listings — homes that sit longer than 21 days statistically sell for less than comparable homes priced correctly out of the gate.",
         "My job isn't to tell you the highest possible number — it's to tell you the right number for your timeline. That honesty is why my clients trust me with the next listing too.",
       ],
     },
@@ -357,7 +364,7 @@ export const content = {
       eyebrow: "Request a Valuation",
       heading: "Tell me about your home.",
       placeholders: {
-        address: "1234 Main St, Woodbridge, VA 22192",
+        address: "Your home address",
         notes: "Recent renovations, timing, special features, etc.",
       },
       submit: "Get My Valuation",
@@ -383,7 +390,7 @@ export const content = {
     truth: {
       eyebrow: "The Truth",
       heading: "You're closer than you think.",
-      body: "Most renters in Virginia and Maryland believe homeownership is years — or a lifetime — away. With the right plan, most are 12 to 24 months from closing on their first home.",
+      body: "Most renters believe homeownership is years — or a lifetime — away. With the right plan, most are 12 to 24 months from closing on their first home.",
     },
     steps: [
       {
@@ -410,7 +417,7 @@ export const content = {
     stats: [
       { to: 0, prefix: "$", label: "What you pay me to start" },
       { to: 24, prefix: "12–", label: "Months from first call to closing" },
-      { to: 2, label: "States — Virginia & Maryland" },
+      { to: 1, label: "State licensed" },
     ],
     forWho: {
       eyebrow: "Who It's For",
@@ -442,7 +449,7 @@ export const content = {
       },
       {
         q: "What does it cost me?",
-        a: "Nothing. Buyer representation in real estate is paid by the seller at closing — that's how the industry works in Virginia and Maryland. The consultation, the planning, the lender intros — all free.",
+        a: "Nothing. Buyer representation in real estate is paid by the seller at closing — that's how the industry works. The consultation, the planning, the lender intros — all free.",
       },
       {
         q: "How long does it actually take?",
@@ -457,7 +464,7 @@ export const content = {
   },
 
   // -------------------------------------------------------------------------
-  // PARTNERS PAGE (NEW)
+  // PARTNERS PAGE
   // -------------------------------------------------------------------------
   partners: {
     hero: {
@@ -473,45 +480,27 @@ export const content = {
       {
         title: "Lenders",
         body: "I always introduce buyers to two or three lenders so you can compare rates, programs, and personality fit. There's no kickback — I just want you with someone who answers their phone on a Saturday.",
-        contacts: [
-          { name: "[Lender Partner Name]", role: "Senior Loan Officer", company: "[Lender Brand]", phone: "[(703) 555-0100]", email: "[name@lender.com]" },
-          { name: "[Lender Partner Name]", role: "Branch Manager", company: "[Lender Brand]", phone: "[(703) 555-0101]", email: "[name@lender.com]" },
-          { name: "[Lender Partner Name]", role: "VA & FHA Specialist", company: "[Lender Brand]", phone: "[(703) 555-0102]", email: "[name@lender.com]" },
-        ],
+        contacts: [],
       },
       {
         title: "Home Inspectors",
         body: "Inspection day is one of the most important days of your transaction. These inspectors take 2–3 hours, walk the home with you, and write reports that read like a person wrote them.",
-        contacts: [
-          { name: "[Inspector Name]", role: "Licensed Home Inspector", company: "[Inspection Company]", phone: "[(703) 555-0200]", email: "[name@inspector.com]" },
-          { name: "[Inspector Name]", role: "Licensed Home Inspector", company: "[Inspection Company]", phone: "[(703) 555-0201]", email: "[name@inspector.com]" },
-        ],
+        contacts: [],
       },
       {
         title: "Insurance",
         body: "Homeowners insurance is required at closing. These agents quote multiple carriers and won't try to upsell you on policies you don't need.",
-        contacts: [
-          { name: "[Insurance Agent Name]", role: "Independent Insurance Agent", company: "[Agency]", phone: "[(703) 555-0300]", email: "[name@insurance.com]" },
-          { name: "[Insurance Agent Name]", role: "Independent Insurance Agent", company: "[Agency]", phone: "[(703) 555-0301]", email: "[name@insurance.com]" },
-        ],
+        contacts: [],
       },
       {
         title: "Repairs & Renovations",
         body: "Pre-listing repairs, post-closing renovations, the punch-list of small things that show up after the inspection. These trades pick up the phone and do the work right.",
-        contacts: [
-          { name: "[Contractor Name]", role: "General Contractor", company: "[Company]", phone: "[(703) 555-0400]", email: "[name@contractor.com]" },
-          { name: "[Specialist Name]", role: "Plumbing", company: "[Company]", phone: "[(703) 555-0401]", email: "[name@plumbing.com]" },
-          { name: "[Specialist Name]", role: "HVAC", company: "[Company]", phone: "[(703) 555-0402]", email: "[name@hvac.com]" },
-          { name: "[Specialist Name]", role: "Electrical", company: "[Company]", phone: "[(703) 555-0403]", email: "[name@electrical.com]" },
-          { name: "[Specialist Name]", role: "Painting & Drywall", company: "[Company]", phone: "[(703) 555-0404]", email: "[name@painting.com]" },
-        ],
+        contacts: [],
       },
       {
         title: "Settlement & Title",
         body: "Closing day runs through these attorneys and title companies. They close on time, communicate clearly, and don't surprise you with line items.",
-        contacts: [
-          { name: "[Attorney Name]", role: "Settlement Attorney", company: "[Firm]", phone: "[(703) 555-0500]", email: "[name@firm.com]" },
-        ],
+        contacts: [],
       },
     ],
     disclaimer:
@@ -538,29 +527,29 @@ export const content = {
     },
     detailsIntro: {
       eyebrow: "Direct Contact",
-      heading: "Samina Bilal · Realtor",
+      heading: "{{realtor_name}} · Realtor",
     },
     consent:
-      "I agree to be contacted by Samina Bilal via call, email, and text. Reply STOP to opt out at any time. Message and data rates may apply.",
+      "I agree to be contacted by {{realtor_name}} via call, email, and text. Reply STOP to opt out at any time. Message and data rates may apply.",
     submit: "Submit",
   },
 
   // -------------------------------------------------------------------------
-  // COMMUNITIES PAGE — heading, table intro, dark break
+  // COMMUNITIES PAGE
   // -------------------------------------------------------------------------
   communities: {
     hero: {
-      eyebrow: "The Six",
+      eyebrow: "Where I Work",
       titleLines: ["Communities"],
       subtitle:
-        "Six neighborhoods I know by street name, school zone, and sale price — with real 2026 market data, written by someone who works these streets every week.",
+        "Neighborhoods I know by street name, school zone, and sale price — with current market data, written by someone who works these streets every week.",
     },
     tableIntro: {
-      eyebrow: "2026 At a Glance",
+      eyebrow: "At a Glance",
       heading: "Side-by-Side Market Read",
       subtitle:
-        "How the six markets actually compare today. Sorted by YoY price change — biggest gainers first.",
-      sourceNote: "Source: Redfin, March 2026. Updated monthly.",
+        "How my markets actually compare today. Sorted by YoY price change — biggest gainers first.",
+      sourceNote: "Source: local MLS, updated monthly.",
     },
     // Optional dark-break section between table and grid. Empty defaults
     // so the page never crashes on a tenant without this admin-block set.
@@ -572,20 +561,19 @@ export const content = {
   },
 
   // -------------------------------------------------------------------------
-  // CLOSINGS PAGE — hero
+  // CLOSINGS PAGE
   // -------------------------------------------------------------------------
   closings: {
     hero: {
-      eyebrow: "Sold by Samina",
+      eyebrow: "Recent Sales",
       titleLines: ["Recent", "Closings"],
       subtitle:
-        "Every home below is one Samina personally represented at the closing table.",
+        "Every home below is one I personally represented at the closing table.",
     },
   },
 
   // -------------------------------------------------------------------------
-  // REVIEWS PAGE — hero, CTA  (top-level key matches the `reviews` PageKey;
-  // nested `home.reviews` is a different section — no collision)
+  // REVIEWS PAGE
   // -------------------------------------------------------------------------
   reviews: {
     hero: {

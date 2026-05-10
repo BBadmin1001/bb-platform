@@ -9,12 +9,18 @@ export default function MenuDrawer({
   open,
   onClose,
   portraitAvatar,
+  realtorName,
+  brokerage,
 }: {
   open: boolean;
   onClose: () => void;
   portraitAvatar?: string;
+  realtorName?: string;
+  brokerage?: string;
 }) {
   const avatar = portraitAvatar || site.portrait.avatar;
+  const displayName = realtorName?.trim() || "Realtor";
+  void brokerage; // reserved for future use (subline / brokerage chip)
   useEffect(() => {
     function onEsc(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -68,10 +74,10 @@ export default function MenuDrawer({
             />
           </div>
           <span
-            className="mt-4 text-[0.7rem] tracking-[0.4em] uppercase text-white/85"
+            className="mt-4 text-[0.7rem] tracking-[0.4em] uppercase text-white/85 whitespace-nowrap"
             style={{ fontWeight: 300 }}
           >
-            Samina&nbsp;Bilal
+            {displayName}
           </span>
           <span className="mt-1.5 text-[0.6rem] tracking-[0.4em] uppercase text-white/55">
             Realtor
