@@ -99,15 +99,22 @@ export async function proxy(request: NextRequest) {
   const isAdminPublic = ADMIN_PUBLIC_PATHS.has(path);
 
   // Master hostname: the public realtor template doesn't apply here.
-  // Anything that isn't /master, /admin (login flows), or /api goes
-  // straight to /master, which itself gates on super_admin and bounces
+  // Anything that isn't an allowed master-hostname path goes straight
+  // to /master, which itself gates on super_admin and bounces
   // unauthenticated visitors to the login form. Net effect: the
-  // master hostname's "front page" is the master dashboard (or login).
+  // master hostname's "front page" is the master dashboard (or login),
+  // BUT customer-facing onboarding URLs (/get-started, /onboarding/done)
+  // still work — those are how sales reps send prospects in.
+  const ALLOWED_ON_MASTER_HOST = [
+    "/master",
+    "/admin",
+    "/api",
+    "/get-started",
+    "/onboarding",
+  ];
   if (
     ctx.kind === "master" &&
-    !path.startsWith("/master") &&
-    !path.startsWith("/admin") &&
-    !path.startsWith("/api")
+    !ALLOWED_ON_MASTER_HOST.some((p) => path === p || path.startsWith(p + "/"))
   ) {
     const redirectUrl = new URL(url.toString());
     redirectUrl.pathname = "/master";
