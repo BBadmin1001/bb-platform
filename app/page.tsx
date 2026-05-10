@@ -1,65 +1,126 @@
-import Image from "next/image";
+import {
+  getRequestContext,
+  getCurrentTenant,
+  getCurrentTenantSlug,
+} from "@/lib/tenant/context";
+import { headers } from "next/headers";
 
-export default function Home() {
+/**
+ * Phase 1.6 hello-world. Proves the proxy → resolver → server-component
+ * loop works end-to-end. Will be replaced by the marketing home in
+ * Phase 2 once we port the design system.
+ */
+export default async function Home() {
+  const [ctx, tenant, slug, h] = await Promise.all([
+    getRequestContext(),
+    getCurrentTenant(),
+    getCurrentTenantSlug(),
+    headers(),
+  ]);
+
+  const host = h.get("host");
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main
+      style={{
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+        padding: "3rem",
+        maxWidth: "60rem",
+        margin: "0 auto",
+        color: "#111",
+        background: "#fafafa",
+        minHeight: "100vh",
+      }}
+    >
+      <h1 style={{ fontSize: "1.6rem", fontWeight: 600, marginBottom: "0.4rem" }}>
+        BB Website Project — tenant probe
+      </h1>
+      <p style={{ color: "#666", marginBottom: "2rem", fontSize: "0.9rem" }}>
+        Proxy resolves the tenant on every request. The header values
+        below are stamped by <code>proxy.ts</code> and read here via{" "}
+        <code>next/headers</code>.
+      </p>
+
+      <table
+        style={{
+          width: "100%",
+          fontSize: "0.85rem",
+          borderCollapse: "collapse",
+        }}
+      >
+        <tbody>
+          <Row k="Host" v={host ?? "—"} />
+          <Row k="Context" v={ctx} highlight={ctx === "tenant" ? "ok" : ctx === "master" ? "info" : "warn"} />
+          <Row k="Tenant slug" v={slug ?? "—"} />
+          <Row k="Tenant id" v={tenant?.id ?? "—"} />
+          <Row k="Realtor name" v={tenant?.realtor_name ?? "—"} />
+          <Row k="Brokerage" v={tenant?.brokerage ?? "—"} />
+          <Row k="Status" v={tenant?.status ?? "—"} />
+          <Row k="State" v={tenant?.state_abbr ?? "—"} />
+          <Row k="Custom domain" v={tenant?.custom_domain ?? "—"} />
+          <Row
+            k="Features"
+            v={
+              tenant?.features
+                ? JSON.stringify(tenant.features)
+                : "—"
+            }
+          />
+        </tbody>
+      </table>
+
+      <h2 style={{ fontSize: "1rem", fontWeight: 600, marginTop: "2rem" }}>
+        How to test
+      </h2>
+      <ul style={{ fontSize: "0.85rem", lineHeight: 1.7, color: "#444" }}>
+        <li>
+          <code>localhost:3000</code> → <code>unknown</code> (no tenants seeded yet)
+        </li>
+        <li>
+          <code>localhost:3000/?tenant=samina</code> → resolves once we
+          insert a tenant with <code>slug=&apos;samina&apos;</code>
+        </li>
+        <li>
+          <code>master.localhost:3000</code> → <code>master</code>
+        </li>
+      </ul>
+    </main>
+  );
+}
+
+function Row({
+  k,
+  v,
+  highlight,
+}: {
+  k: string;
+  v: string;
+  highlight?: "ok" | "info" | "warn";
+}) {
+  const color =
+    highlight === "ok"
+      ? "#0a7"
+      : highlight === "info"
+        ? "#06c"
+        : highlight === "warn"
+          ? "#a60"
+          : "#111";
+  return (
+    <tr style={{ borderTop: "1px solid #eee" }}>
+      <th
+        style={{
+          textAlign: "left",
+          padding: "0.55rem 0.5rem",
+          width: "12rem",
+          color: "#888",
+          fontWeight: 500,
+        }}
+      >
+        {k}
+      </th>
+      <td style={{ padding: "0.55rem 0.5rem", color, fontWeight: 600 }}>
+        {v}
+      </td>
+    </tr>
   );
 }
