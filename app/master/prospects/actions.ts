@@ -8,6 +8,8 @@ import {
   createPaymentLinkForQuote,
   isStripeConfigured,
 } from "@/lib/stripe";
+import { seedTenantFromIntake } from "@/lib/seedTenantFromIntake";
+import type { IntakeData } from "@/lib/intakeSchema";
 
 type Result =
   | { ok: true; prospectId?: string; paymentLinkUrl?: string }
@@ -254,33 +256,63 @@ export async function provisionFromProspect(input: {
   const { data: p } = await supabase
     .from("prospects")
     .select(
-      "id, business_name, contact_name, email, phone, desired_domain, state_abbr, status",
+      "id, business_name, contact_name, email, phone, desired_domain, state_abbr, status, intake_data, tenant_id",
     )
     .eq("id", input.prospectId)
     .maybeSingle();
   if (!p) return { ok: false, error: "Prospect not found." };
+  if (p.tenant_id) {
+    return {
+      ok: false,
+      error: "This prospect already has a tenant — open it from the Tenants tab.",
+    };
+  }
+
+  // Prefer intake_data values over the legacy short-form columns.
+  // intake.realtor_full_name is the customer's BUSINESS-facing name
+  // (what shows on the site); contact_name from the legacy form was
+  // really the same thing for old prospects, so fall through.
+  const intake = (p.intake_data ?? null) as IntakeData | null;
+  const realtorName = intake?.realtor_full_name?.trim() || p.contact_name;
+  const brokerage = intake?.brokerage_name?.trim() || p.business_name;
+  const stateAbbr =
+    intake?.licensed_states?.[0]?.state_abbr?.toUpperCase() ||
+    p.state_abbr ||
+    null;
+  const desiredDomain = intake?.desired_domain || p.desired_domain || null;
 
   // Insert the tenant — pending status, domain will run through the
-  // standard verifier on its own (we don't reuse createTenant action
-  // here because we're already authed as super_admin and need to
-  // capture the resulting tenant id for the linkback).
+  // standard verifier on its own.
   const { data: tenantRow, error: tErr } = await supabase
     .from("tenants")
     .insert({
       slug,
-      realtor_name: p.contact_name,
-      brokerage: p.business_name,
+      realtor_name: realtorName,
+      brokerage,
       contact_email: p.email,
-      contact_phone: p.phone,
-      state_abbr: p.state_abbr,
-      custom_domain: p.desired_domain,
-      domain_check_state: p.desired_domain ? "pending" : "unset",
+      contact_phone: intake?.phone || p.phone,
+      state_abbr: stateAbbr,
+      custom_domain: desiredDomain,
+      domain_check_state: desiredDomain ? "pending" : "unset",
       status: "pending",
       prospect_id: p.id,
     })
     .select("id")
     .single();
   if (tErr) return { ok: false, error: tErr.message };
+
+  // Seed content from the intake payload — Phase 8. This is what
+  // makes "polishing" actually polishing instead of data entry.
+  let seedWarnings: string[] = [];
+  if (intake) {
+    const seed = await seedTenantFromIntake(supabase, tenantRow.id, intake);
+    if (seed.ok) {
+      seedWarnings = seed.warnings;
+    } else {
+      // Don't fail the provisioning — the tenant exists, just log.
+      console.warn("[provisionFromProspect] seed failed:", seed.error);
+    }
+  }
 
   // Link back + flip lifecycle.
   await supabase
@@ -292,6 +324,13 @@ export async function provisionFromProspect(input: {
       provisioned_at: new Date().toISOString(),
     })
     .eq("id", p.id);
+
+  if (seedWarnings.length > 0) {
+    console.warn(
+      "[provisionFromProspect] partial seed:",
+      seedWarnings.join("; "),
+    );
+  }
 
   revalidatePath(`/master/prospects/${input.prospectId}`);
   revalidatePath("/master/prospects");

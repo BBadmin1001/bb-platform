@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyWebhook, getStripe } from "@/lib/stripe";
 import { reconcileTenantFeatures } from "@/lib/features";
+import { seedTenantFromIntake } from "@/lib/seedTenantFromIntake";
+import type { IntakeData } from "@/lib/intakeSchema";
 import type Stripe from "stripe";
 
 /**
@@ -106,7 +108,9 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
   // bail.
   const { data: existing } = await supabase
     .from("prospects")
-    .select("id, paid_at, status, stripe_session_id")
+    .select(
+      "id, paid_at, status, stripe_session_id, tenant_id, intake_data, contact_name, business_name, email, phone, desired_domain, state_abbr",
+    )
     .eq("id", prospectId)
     .maybeSingle();
   if (!existing) {
@@ -129,6 +133,116 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
     .eq("id", prospectId);
 
   console.log("[stripe webhook] prospect", prospectId, "marked paid");
+
+  // ── Auto-provision a tenant in `pending` status when the prospect
+  // came in via the wizard (i.e. has intake_data) and doesn't already
+  // have a tenant. The tenant goes into the polishing queue with
+  // intake content seeded — the master team takes over from there.
+  if (!existing.tenant_id && existing.intake_data) {
+    await autoProvisionFromPaidProspect(supabase, {
+      id: existing.id,
+      contact_name: existing.contact_name as string,
+      business_name: existing.business_name as string,
+      email: existing.email as string,
+      phone: existing.phone as string | null,
+      desired_domain: existing.desired_domain as string | null,
+      state_abbr: existing.state_abbr as string | null,
+      intake_data: existing.intake_data as IntakeData,
+    });
+  }
+}
+
+/**
+ * Provision a tenant immediately on payment from the wizard intake.
+ * Service-role-scoped (no auth — webhook is unauthenticated). The
+ * tenant is created in `pending` status so it's not publicly visible
+ * until the polish team approves + the customer attaches a domain.
+ */
+async function autoProvisionFromPaidProspect(
+  supabase: ReturnType<typeof createServiceClient>,
+  prospect: {
+    id: string;
+    contact_name: string;
+    business_name: string;
+    email: string;
+    phone: string | null;
+    desired_domain: string | null;
+    state_abbr: string | null;
+    intake_data: IntakeData;
+  },
+): Promise<void> {
+  const intake = prospect.intake_data;
+
+  // Slug = sanitized realtor name with a short uniquifier.
+  const baseSlug = (intake.realtor_full_name || prospect.contact_name)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  const uniq = Math.random().toString(36).slice(2, 6);
+  const slug = `${baseSlug || "tenant"}-${uniq}`;
+
+  const realtorName =
+    intake.realtor_full_name?.trim() || prospect.contact_name;
+  const brokerage =
+    intake.brokerage_name?.trim() || prospect.business_name;
+  const stateAbbr =
+    intake.licensed_states?.[0]?.state_abbr?.toUpperCase() ||
+    prospect.state_abbr ||
+    null;
+  const desiredDomain = intake.desired_domain || prospect.desired_domain || null;
+
+  const { data: tenantRow, error: tErr } = await supabase
+    .from("tenants")
+    .insert({
+      slug,
+      realtor_name: realtorName,
+      brokerage,
+      contact_email: prospect.email,
+      contact_phone: intake.phone || prospect.phone,
+      state_abbr: stateAbbr,
+      custom_domain: desiredDomain,
+      domain_check_state: desiredDomain ? "pending" : "unset",
+      status: "pending", // Phase 9 will introduce a polishing-specific status
+      prospect_id: prospect.id,
+    })
+    .select("id")
+    .single();
+  if (tErr || !tenantRow) {
+    console.error(
+      "[stripe webhook] tenant insert failed",
+      tErr?.message ?? "no row",
+    );
+    return;
+  }
+
+  // Seed the tenant's content from the intake payload.
+  const seed = await seedTenantFromIntake(supabase, tenantRow.id, intake);
+  if (!seed.ok) {
+    console.error("[stripe webhook] seed failed:", seed.error);
+  } else if (seed.warnings.length > 0) {
+    console.warn(
+      "[stripe webhook] partial seed:",
+      seed.warnings.join("; "),
+    );
+  }
+
+  // Linkback + lifecycle.
+  await supabase
+    .from("prospects")
+    .update({
+      tenant_id: tenantRow.id,
+      status: "provisioned",
+      provisioned_at: new Date().toISOString(),
+    })
+    .eq("id", prospect.id);
+
+  console.log(
+    "[stripe webhook] auto-provisioned tenant",
+    slug,
+    "for prospect",
+    prospect.id,
+  );
 }
 
 /**
