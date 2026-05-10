@@ -1,0 +1,10 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# The Next.js runtime plugin handles SSR / server actions / middleware
+# (called Proxy in Next 16) on Netlify Functions automatically. No
+# extra config needed — Netlify auto-installs the latest version on
+# build.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
