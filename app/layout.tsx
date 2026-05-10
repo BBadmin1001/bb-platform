@@ -79,7 +79,10 @@ export default async function RootLayout({
   // double-render at the top of every admin page. proxy.ts stamps
   // x-pathname on every request so we can read it here.
   const path = h.get("x-pathname") ?? "";
-  const hideShell = path.startsWith("/admin") || path.startsWith("/master");
+  const hideShell =
+    path.startsWith("/admin") ||
+    path.startsWith("/master") ||
+    path.startsWith("/get-started");
 
   return (
     <html lang="en" className={montserrat.variable}>

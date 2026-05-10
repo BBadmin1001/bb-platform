@@ -11,6 +11,7 @@ import {
   Menu as MenuIcon,
   LogOut,
   Sparkles,
+  HandCoins,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -23,6 +24,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: "/master", label: "Overview", icon: Sparkles },
+  { href: "/master/prospects", label: "Prospects", icon: HandCoins, matchPrefix: true },
   { href: "/master/tenants", label: "Tenants", icon: Building2, matchPrefix: true },
   { href: "/master/plans", label: "Plans", icon: CreditCard, matchPrefix: true },
   { href: "/master/leads", label: "All Leads", icon: InboxIcon, matchPrefix: true },
