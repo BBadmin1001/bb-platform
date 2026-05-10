@@ -98,6 +98,22 @@ export async function proxy(request: NextRequest) {
   const isAdminPath = path.startsWith("/admin");
   const isAdminPublic = ADMIN_PUBLIC_PATHS.has(path);
 
+  // Master hostname: the public realtor template doesn't apply here.
+  // Anything that isn't /master, /admin (login flows), or /api goes
+  // straight to /master, which itself gates on super_admin and bounces
+  // unauthenticated visitors to the login form. Net effect: the
+  // master hostname's "front page" is the master dashboard (or login).
+  if (
+    ctx.kind === "master" &&
+    !path.startsWith("/master") &&
+    !path.startsWith("/admin") &&
+    !path.startsWith("/api")
+  ) {
+    const redirectUrl = new URL(url.toString());
+    redirectUrl.pathname = "/master";
+    return NextResponse.redirect(redirectUrl);
+  }
+
   // Block deeper /admin/* without auth — bounce to /admin (which
   // renders the login form when there's no session).
   if (isAdminPath && !isAdminPublic && !user) {

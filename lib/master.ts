@@ -21,7 +21,10 @@ export async function requireSuperAdmin() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    redirect("/admin");
+    // Set `?from=/master` so the login form pushes the user back to
+    // master after they sign in (instead of stranding them in the
+    // tenant admin editor, which has no meaning on the master host).
+    redirect("/admin?from=/master");
   }
 
   const { data: row } = await supabase
@@ -30,6 +33,8 @@ export async function requireSuperAdmin() {
     .eq("user_id", user.id)
     .maybeSingle();
   if (!row) {
+    // Authed but not a super admin — they shouldn't loop back into
+    // master, so drop the `from` param.
     redirect("/admin");
   }
 

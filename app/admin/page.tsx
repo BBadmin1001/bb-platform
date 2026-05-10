@@ -1,7 +1,9 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
 import AdminLoginForm from "@/components/admin/AdminLoginForm";
 import AdminCard from "@/components/admin/AdminCard";
+import { getRequestContext } from "@/lib/tenant/context";
 import {
   FileText,
   Image as ImageIcon,
@@ -173,6 +175,19 @@ export default async function AdminDashboard({
   if (!user) {
     const from = (await searchParams)?.from;
     return <AdminLoginForm from={from} />;
+  }
+
+  // On the master hostname, a signed-in super admin who lands here
+  // should jump straight into the master dashboard. The /admin route
+  // is the tenant editor — meaningless on master hostname (no tenant
+  // in context). One DB hit to check super admin; cheap enough.
+  if ((await getRequestContext()) === "master") {
+    const { data: superRow } = await supabase
+      .from("super_admins")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (superRow) redirect("/master");
   }
 
   // Pull the unlocked feature set so dashboard cards can show a
