@@ -12,6 +12,7 @@ import {
   LogOut,
   Sparkles,
   HandCoins,
+  Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -26,6 +27,7 @@ const NAV: NavItem[] = [
   { href: "/master", label: "Overview", icon: Sparkles },
   { href: "/master/prospects", label: "Prospects", icon: HandCoins, matchPrefix: true },
   { href: "/master/tenants", label: "Tenants", icon: Building2, matchPrefix: true },
+  { href: "/master/sales-reps", label: "Sales Reps", icon: Users, matchPrefix: true },
   { href: "/master/plans", label: "Plans", icon: CreditCard, matchPrefix: true },
   { href: "/master/leads", label: "All Leads", icon: InboxIcon, matchPrefix: true },
   { href: "/master/super-admins", label: "Super Admins", icon: ShieldCheck, matchPrefix: true },
