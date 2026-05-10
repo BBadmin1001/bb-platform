@@ -50,8 +50,12 @@ export async function upsertCommunity(
   };
 
   const query = existingId
-    ? supabase.from("communities").update(payload).eq("id", existingId)
-    : supabase.from("communities").insert(payload);
+    ? supabase
+        .from("communities")
+        .update(payload)
+        .eq("id", existingId)
+        .eq("tenant_id", tenantId)
+    : supabase.from("communities").insert({ tenant_id: tenantId, ...payload });
 
   const { error } = await query;
   if (error) return { ok: false, error: error.message };
@@ -68,7 +72,11 @@ export async function deleteCommunity(id: string): Promise<Result> {
   if (!auth.ok) return { ok: false, error: auth.error };
   const { supabase, tenantId } = auth;
 
-  const { error } = await supabase.from("communities").delete().eq("id", id);
+  const { error } = await supabase
+    .from("communities")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", tenantId);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/communities");
@@ -132,15 +140,19 @@ export async function seedDefaultCommunities(): Promise<Result> {
 
   const { communities: staticOnes } = await import("@/lib/communities");
 
-  // Insert only those slugs not already present
+  // Insert only those slugs not already present FOR THIS TENANT.
+  // RLS already restricts to has_tenant_access(tenant_id) but explicit
+  // is clearer.
   const { data: existing } = await supabase
     .from("communities")
-    .select("slug");
+    .select("slug")
+    .eq("tenant_id", tenantId);
   const existingSlugs = new Set((existing ?? []).map((r) => r.slug));
 
   const toInsert = staticOnes
     .filter((c) => !existingSlugs.has(c.slug))
     .map((c, idx) => ({
+      tenant_id: tenantId,
       slug: c.slug,
       name: c.name,
       state: c.state,
