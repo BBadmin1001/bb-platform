@@ -44,7 +44,16 @@ export type ResolveContext =
   | { kind: "master" }
   | { kind: "unknown"; hostname: string };
 
-const MASTER_HOST = (process.env.MASTER_HOSTNAME ?? "master.localhost").toLowerCase();
+// Read NEXT_PUBLIC_MASTER_HOSTNAME first so the value gets inlined into
+// the Netlify Edge bundle at build time. Edge functions on Netlify
+// don't reliably surface non-public env vars at runtime, and this
+// resolver runs in the Edge proxy. Falls back to MASTER_HOSTNAME
+// (server-only) for local dev where the SSR runtime can read it.
+const MASTER_HOST = (
+  process.env.NEXT_PUBLIC_MASTER_HOSTNAME ??
+  process.env.MASTER_HOSTNAME ??
+  "master.localhost"
+).toLowerCase();
 const DEV_TENANT_SLUG = process.env.DEV_TENANT_SLUG ?? null;
 
 const TENANT_COLUMNS =
