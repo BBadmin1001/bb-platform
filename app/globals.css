@@ -305,9 +305,16 @@ a:hover svg, button:hover svg, .group:hover svg, .glow:hover {
 @property --shine-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 @property --shine-b { syntax: "<angle>"; inherits: false; initial-value: 180deg; }
 
-:where(.glass-light, .glass-dark) {
-  position: relative;
-  isolation: isolate;
+/* Wrapped in @layer components so Tailwind v4's @layer utilities
+   (where `.absolute`, `.fixed`, `.sticky` live with zero specificity)
+   always beat this default. Without the layer, any element with
+   `glass-dark` + `absolute` ends up `position: relative` because both
+   selectors share specificity 0 and source order picks ours. */
+@layer components {
+  :where(.glass-light, .glass-dark) {
+    position: relative;
+    isolation: isolate;
+  }
 }
 
 .glass-light::before, .glass-light::after,
