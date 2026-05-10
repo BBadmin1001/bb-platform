@@ -9,10 +9,13 @@ import {
   RefreshCcw,
   Rocket,
   Copy as CopyIcon,
+  Link2,
+  Plug,
 } from "lucide-react";
 import {
   runDomainCheck,
   promoteToActive,
+  syncNetlifyAlias,
 } from "@/app/master/tenants/actions";
 
 interface Props {
@@ -26,6 +29,12 @@ interface Props {
   domainVerifiedAt: string | null;
   /** Default DNS target from env, used when row hasn't recorded one yet. */
   fallbackTarget: string;
+
+  /** Netlify alias sync state — surfaced beneath the DNS panel. */
+  netlifyAliasAddedAt: string | null;
+  netlifyAliasSyncedFor: string | null;
+  netlifyAliasError: string | null;
+  netlifyLastSyncedAt: string | null;
 }
 
 const STATE_META: Record<
@@ -96,6 +105,50 @@ export default function DomainStatusPanel(props: Props) {
       router.refresh();
     });
   }
+
+  function handleSyncNetlify() {
+    setError(null);
+    setInfo(null);
+    startTransition(async () => {
+      const res = await syncNetlifyAlias(props.slug);
+      if (!res.ok) return setError(res.error);
+      setInfo("Netlify alias synced.");
+      router.refresh();
+    });
+  }
+
+  // Netlify status derives from the four columns. Categories:
+  //   - synced       : alias added, current domain matches what was synced
+  //   - drifted      : alias was synced but to a different domain (rare —
+  //                    happens when admin edits the row directly in DB)
+  //   - error        : last attempt produced an error message
+  //   - unconfigured : env not set (the canonical "skipped" message)
+  //   - unknown      : never tried yet
+  type NetlifyState = "synced" | "drifted" | "error" | "unconfigured" | "unknown";
+  const netlifyState: NetlifyState = (() => {
+    if (
+      props.netlifyAliasError?.toLowerCase().includes("not configured")
+    ) {
+      return "unconfigured";
+    }
+    if (props.netlifyAliasError) return "error";
+    if (
+      props.netlifyAliasAddedAt &&
+      props.netlifyAliasSyncedFor === props.customDomain
+    ) {
+      return "synced";
+    }
+    if (props.netlifyAliasAddedAt) return "drifted";
+    return "unknown";
+  })();
+  const NETLIFY_PILL: Record<NetlifyState, { label: string; bg: string; fg: string }> = {
+    synced: { label: "Synced", bg: "rgba(76,175,80,0.16)", fg: "#1b5e20" },
+    drifted: { label: "Out of sync", bg: "rgba(255,167,38,0.16)", fg: "#a65300" },
+    error: { label: "Error", bg: "rgba(229,57,53,0.14)", fg: "#a51a1a" },
+    unconfigured: { label: "Not configured", bg: "rgba(0,0,0,0.06)", fg: "#555" },
+    unknown: { label: "Not yet synced", bg: "rgba(0,0,0,0.06)", fg: "#555" },
+  };
+  const netlifyPill = NETLIFY_PILL[netlifyState];
 
   return (
     <section className="admin-card p-6 mb-10">
@@ -211,7 +264,95 @@ export default function DomainStatusPanel(props: Props) {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Netlify alias section — surfaces whether the platform-side
+          domain alias is in place and gives master a one-click resync. */}
+      {props.customDomain && (
+        <div
+          className="rounded-md mt-5 p-4 border flex items-start gap-3"
+          style={{
+            background: "color-mix(in srgb, var(--card) 96%, transparent)",
+            borderColor: "var(--border)",
+          }}
+        >
+          <span
+            className="flex h-8 w-8 items-center justify-center rounded-md shrink-0 mt-0.5"
+            style={{
+              background: "color-mix(in srgb, var(--primary) 12%, transparent)",
+              color: "var(--primary)",
+            }}
+          >
+            <Plug size={14} strokeWidth={1.6} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <p
+                className="text-xs uppercase tracking-[0.18em]"
+                style={{ color: "var(--muted-foreground)", fontWeight: 700 }}
+              >
+                Netlify alias
+              </p>
+              <span
+                className="text-[10px] uppercase tracking-[0.18em] px-2 py-0.5 rounded-full"
+                style={{
+                  background: netlifyPill.bg,
+                  color: netlifyPill.fg,
+                  fontWeight: 700,
+                }}
+              >
+                {netlifyPill.label}
+              </span>
+              {props.netlifyLastSyncedAt && (
+                <span
+                  className="text-[10px] admin-mono"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  · last try {new Date(props.netlifyLastSyncedAt).toLocaleString()}
+                </span>
+              )}
+            </div>
+            {netlifyState === "synced" && (
+              <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                <code className="admin-mono">{props.netlifyAliasSyncedFor}</code>{" "}
+                is registered as a domain alias on the Netlify site. SSL is
+                provisioning automatically.
+              </p>
+            )}
+            {netlifyState === "drifted" && (
+              <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                Alias is registered as{" "}
+                <code className="admin-mono">{props.netlifyAliasSyncedFor}</code>{" "}
+                but the row's current domain is{" "}
+                <code className="admin-mono">{props.customDomain}</code>. Sync
+                to reconcile.
+              </p>
+            )}
+            {netlifyState === "error" && (
+              <p
+                className="text-xs"
+                style={{ color: "var(--destructive)", fontWeight: 500 }}
+              >
+                {props.netlifyAliasError}
+              </p>
+            )}
+            {netlifyState === "unconfigured" && (
+              <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                Set <code className="admin-mono">NETLIFY_API_TOKEN</code> +{" "}
+                <code className="admin-mono">NETLIFY_SITE_ID</code> in env to
+                auto-add aliases on save. Right now you'll need to add this
+                domain manually in the Netlify dashboard.
+              </p>
+            )}
+            {netlifyState === "unknown" && (
+              <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                Not synced yet. Click below to add this domain as an alias on
+                the platform's Netlify site.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3 mt-5">
         <button
           type="button"
           onClick={handleRecheck}
@@ -224,6 +365,19 @@ export default function DomainStatusPanel(props: Props) {
           />
           {pending ? "Checking…" : "Recheck DNS"}
         </button>
+
+        {props.customDomain && (
+          <button
+            type="button"
+            onClick={handleSyncNetlify}
+            disabled={pending}
+            className="admin-btn admin-btn-secondary"
+            title="Re-add this domain as a Netlify alias"
+          >
+            <Link2 size={13} className="mr-2" />
+            Sync to Netlify
+          </button>
+        )}
 
         {props.customDomain &&
           props.domainCheckState === "verified" &&

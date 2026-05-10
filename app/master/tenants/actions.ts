@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/master";
 import { checkDomain, getPlatformTarget } from "@/lib/dns";
+import {
+  addNetlifyAlias,
+  removeNetlifyAlias,
+  isNetlifyConfigured,
+} from "@/lib/netlify";
 
 export type TenantInput = {
   slug: string;
@@ -61,10 +66,11 @@ export async function createTenant(input: TenantInput): Promise<Result> {
   });
   if (error) return { ok: false, error: error.message };
 
-  // Kick off a domain check immediately so the master sees fresh data
-  // when they land on the detail page.
+  // Kick off a domain check + Netlify alias sync immediately so the
+  // master sees fresh data when they land on the detail page.
   if (customDomain) {
     await runDomainCheck(slug);
+    await syncNetlifyAlias(slug);
   }
 
   revalidatePath("/master/tenants");
@@ -114,8 +120,26 @@ export async function updateTenant(
   const { error } = await supabase.from("tenants").update(updates).eq("id", id);
   if (error) return { ok: false, error: error.message };
 
-  if (domainChanged && newDomain) {
-    await runDomainCheck(input.slug.trim().toLowerCase());
+  if (domainChanged) {
+    // Reconcile Netlify: remove the OLD alias (if any), then add new.
+    if (current?.custom_domain) {
+      await removeNetlifyAlias(current.custom_domain);
+    }
+    if (newDomain) {
+      await runDomainCheck(input.slug.trim().toLowerCase());
+      await syncNetlifyAlias(input.slug.trim().toLowerCase());
+    } else {
+      // Domain cleared — wipe alias state for this row.
+      await supabase
+        .from("tenants")
+        .update({
+          netlify_alias_added_at: null,
+          netlify_alias_synced_for: null,
+          netlify_alias_error: null,
+          netlify_last_synced_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+    }
   }
 
   revalidatePath("/master/tenants");
@@ -125,6 +149,19 @@ export async function updateTenant(
 
 export async function deleteTenant(id: string): Promise<Result> {
   const { supabase } = await requireSuperAdmin();
+
+  // Pull the domain so we can drop the Netlify alias before the row
+  // is gone (after the cascade the alias would be orphaned).
+  const { data: existing } = await supabase
+    .from("tenants")
+    .select("custom_domain")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (existing?.custom_domain) {
+    await removeNetlifyAlias(existing.custom_domain);
+  }
+
   const { error } = await supabase.from("tenants").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/master/tenants");
@@ -217,4 +254,63 @@ export async function promoteToActive(slug: string): Promise<Result> {
   revalidatePath("/master/tenants");
   revalidatePath(`/master/tenants/${slug}`);
   return { ok: true };
+}
+
+/**
+ * Sync this tenant's custom_domain to Netlify as a domain alias.
+ *
+ * Called automatically from createTenant + updateTenant. Also exposed
+ * as a server action so the master UI has a "Sync to Netlify" retry
+ * button for the case where a transient error left the alias missing.
+ *
+ * Records the result on the tenant row:
+ *   - ok       → netlify_alias_added_at + netlify_alias_synced_for
+ *                + clears netlify_alias_error
+ *   - skipped  → leaves prior values, sets a friendly error
+ *   - failure  → clears synced state, records the message
+ */
+export async function syncNetlifyAlias(slug: string): Promise<
+  Result & { skipped?: boolean; netlifyError?: string }
+> {
+  const { supabase } = await requireSuperAdmin();
+
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id, custom_domain")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!tenant) return { ok: false, error: "Tenant not found." };
+  if (!tenant.custom_domain) {
+    return { ok: false, error: "No custom domain to sync." };
+  }
+
+  const result = await addNetlifyAlias(tenant.custom_domain);
+  const now = new Date().toISOString();
+
+  const updates: Record<string, unknown> = { netlify_last_synced_at: now };
+
+  if (result.ok) {
+    updates.netlify_alias_added_at = now;
+    updates.netlify_alias_synced_for = tenant.custom_domain;
+    updates.netlify_alias_error = null;
+  } else if (result.skipped) {
+    updates.netlify_alias_error =
+      "Netlify not configured (NETLIFY_API_TOKEN / NETLIFY_SITE_ID missing).";
+  } else {
+    updates.netlify_alias_added_at = null;
+    updates.netlify_alias_synced_for = null;
+    updates.netlify_alias_error = result.error;
+  }
+
+  await supabase.from("tenants").update(updates).eq("id", tenant.id);
+  revalidatePath(`/master/tenants/${slug}`);
+  revalidatePath("/master/tenants");
+
+  if (result.ok) return { ok: true, slug };
+  return {
+    ok: false,
+    error: result.error,
+    skipped: !!result.skipped,
+    netlifyError: result.error,
+  };
 }

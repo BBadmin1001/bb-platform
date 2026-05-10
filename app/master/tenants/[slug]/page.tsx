@@ -19,7 +19,7 @@ export default async function TenantDetailPage({
   const { data: tenant } = await supabase
     .from("tenants")
     .select(
-      "id, slug, custom_domain, realtor_name, brokerage, contact_email, contact_phone, state_abbr, status, created_at, provisioned_at, features, stripe_customer_id, domain_target, domain_check_state, domain_check_value, domain_checked_at, domain_verified_at",
+      "id, slug, custom_domain, realtor_name, brokerage, contact_email, contact_phone, state_abbr, status, created_at, provisioned_at, features, stripe_customer_id, domain_target, domain_check_state, domain_check_value, domain_checked_at, domain_verified_at, netlify_alias_added_at, netlify_alias_synced_for, netlify_alias_error, netlify_last_synced_at",
     )
     .eq("slug", slug)
     .maybeSingle();
@@ -116,6 +116,10 @@ export default async function TenantDetailPage({
         domainCheckedAt={tenant.domain_checked_at}
         domainVerifiedAt={tenant.domain_verified_at}
         fallbackTarget={getPlatformTarget()}
+        netlifyAliasAddedAt={tenant.netlify_alias_added_at}
+        netlifyAliasSyncedFor={tenant.netlify_alias_synced_for}
+        netlifyAliasError={tenant.netlify_alias_error}
+        netlifyLastSyncedAt={tenant.netlify_last_synced_at}
       />
 
       {/* Quick stats */}
