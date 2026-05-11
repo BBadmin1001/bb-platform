@@ -98,10 +98,14 @@ export default async function TenantDetailPage({
         {tenant.custom_domain && ` · ${tenant.custom_domain}`}
       </p>
 
-      {/* Quick links */}
+      {/* Quick links — both URLs carry the preview_token so they
+          resolve to this tenant even when status is still `pending`
+          (i.e. during polishing, before the customer's domain is
+          live). The resolver honours ?tenant= for `active` tenants
+          and ?preview= for any status. */}
       <div className="flex flex-wrap gap-3 mb-10">
         <Link
-          href={`/?tenant=${tenant.slug}`}
+          href={`/?tenant=${tenant.slug}&preview=${tenant.preview_token}`}
           target="_blank"
           rel="noopener noreferrer"
           className="admin-btn admin-btn-secondary"
@@ -111,7 +115,7 @@ export default async function TenantDetailPage({
           <ArrowUpRight size={11} className="ml-1.5" />
         </Link>
         <Link
-          href={`/admin?tenant=${tenant.slug}`}
+          href={`/admin?tenant=${tenant.slug}&preview=${tenant.preview_token}`}
           target="_blank"
           rel="noopener noreferrer"
           className="admin-btn admin-btn-secondary"

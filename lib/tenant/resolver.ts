@@ -116,13 +116,26 @@ export async function resolveTenant(
     if (data) return { kind: "tenant", tenant: data as ResolvedTenant };
   }
 
+  // 0b. `?tenant=<slug>` query override — also runs BEFORE master/host
+  // checks so master operators can view + edit any tenant's site from
+  // the master URL. Only resolves to active tenants (slug isn't a
+  // secret, so this is safe to expose publicly). Non-active tenants
+  // still need the preview_token path above.
+  const tenantSlugQuery = searchParams?.get("tenant");
+  if (tenantSlugQuery && /^[a-z0-9][a-z0-9-]*[a-z0-9]$/i.test(tenantSlugQuery)) {
+    const { data } = await supabase
+      .from("tenants")
+      .select(TENANT_COLUMNS)
+      .eq("slug", tenantSlugQuery.toLowerCase())
+      .eq("status", "active")
+      .maybeSingle();
+    if (data) return { kind: "tenant", tenant: data as ResolvedTenant };
+  }
+
   // 1. Master dashboard.
   if (host === MASTER_HOST) {
     return { kind: "master" };
   }
-
-  // (continued — supabase client is already initialized above for the
-  // preview-token check.)
 
   // 2. Custom domain.
   {
@@ -149,17 +162,16 @@ export async function resolveTenant(
     if (data) return { kind: "tenant", tenant: data as ResolvedTenant };
   }
 
-  // 4. Dev fallbacks: ?tenant= query, or DEV_TENANT_SLUG env.
-  const devSlug =
-    searchParams?.get("tenant") ?? (host === "localhost" ? DEV_TENANT_SLUG : null);
-  if (devSlug) {
+  // 4. Local-dev DEV_TENANT_SLUG fallback (only on `localhost`).
+  // The `?tenant=` query path is already handled above as a first-
+  // class override.
+  if (host === "localhost" && DEV_TENANT_SLUG) {
     const { data } = await supabase
       .from("tenants")
       .select(TENANT_COLUMNS)
-      .eq("slug", devSlug)
+      .eq("slug", DEV_TENANT_SLUG)
       .eq("status", "active")
       .maybeSingle();
-
     if (data) return { kind: "tenant", tenant: data as ResolvedTenant };
   }
 
