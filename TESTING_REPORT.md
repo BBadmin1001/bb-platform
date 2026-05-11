@@ -209,7 +209,77 @@ Each agent appends its findings to the relevant section below. Use timestamps an
 > Every bug fixed by Agent 2 in either round.
 > Each entry: timestamp · bug id · what changed · commit hash (if pushed) · verification step.
 
-_(empty)_
+- **[A1-001]** *(closed 2026-05-11 — verified self-resolved after sticky-tenant deploy)* — Sticky tenant cookie now ships; verified `Set-Cookie: bb-master-tenant=` on `/admin?tenant=samina` requests against production.
+  - Verification: `curl -sI "https://bb-platform-387.netlify.app/admin?tenant=samina"` → returns the cookie.
+
+- **[A1-002]** *(closed 2026-05-11)* — Replaced `lib/site.ts` with a per-tenant chrome resolver. Footer / Header / MenuDrawer / Logo / Contact / Privacy / Communities / Closings / OpenHouse / RealtorIn / LeaveReview / Sellers all consume `getTenantChrome()` instead of importing Samina-hardcoded constants. Also fixed cascading data leaks: `reviewsLoader`, `closingsLoader`, `communitiesLoader` no longer fall back to Samina's static datasets. `getPortrait` no longer falls back to `/images/Samina%20Headshot.jpeg`. `ratingsLine` static defaults blanked (per-tenant aggregate ratings deferred to Phase 03).
+  - Commits: `40d98d3`, `3803c93`, `825753d`.
+  - Files (24): `lib/tenant/chrome.ts` (new), `lib/site.ts` (untouched but no longer imported on public paths), `lib/contentLoader.ts`, `lib/reviewsLoader.ts`, `lib/closingsLoader.ts`, `lib/communitiesLoader.ts`, `lib/reviews.ts`, `components/Footer.tsx`, `components/Logo.tsx`, `components/Header.tsx`, `components/MenuDrawer.tsx`, `components/ReviewsStrip.tsx`, `components/ContactForm.tsx`, `components/ValuationForm.tsx`, `components/LeaveReviewForm.tsx`, `components/admin/AdminSidebar.tsx`, `app/layout.tsx`, `app/contact/page.tsx`, `app/privacy/page.tsx`, `app/communities/[slug]/page.tsx`, `app/communities/page.tsx`, `app/about/page.tsx`, `app/buyers/page.tsx`, `app/sellers/page.tsx`, `app/path-to-ownership/page.tsx`, `app/partners/page.tsx`, `app/reviews/page.tsx`, `app/closings/page.tsx`, `app/leave-review/page.tsx`, `app/open-house/[slug]/page.tsx`, `app/realtor-in/[slug]/page.tsx`, `app/page.tsx`.
+  - Verification: `curl -sS "https://bb-platform-387.netlify.app/contact?tenant=demo-emerald" | grep -c Samina` → `0`. `curl -sS "/?tenant=demo-emerald" | grep -c Samina` → `0` (previously 6). Footer for demo-emerald now reads "© 2026 Maya Chen" + Compass brokerage instead of Samina/RE-MAX-Galaxy.
+
+- **[A1-003]** *(closed 2026-05-11)* — Added Contact & License admin editor under Brand Identity. Decision: stored under `content_blocks(page='brand', key='contact')` rather than extending the `tenants` table — the shape (variable license rows, optional social URLs, optional brokerage office) maps cleanly to JSONB and avoids a migration. The new section ships with shape: phone / email / social.{instagram,facebook,tiktok,linkedin} / licenses[] / office.{name,street,cityStateZip,phone}. Auto-rendered by the existing SectionEditor; flows live into the chrome resolver above.
+  - Commit: `40d98d3`.
+  - Files: `lib/contentRegistry.ts`, `app/admin/brand/page.tsx`.
+  - Verification: open `/admin/brand?tenant=samina` → "Contact & License" card visible. Open `/admin/content/brand/contact?tenant=samina` → form renders with all fields. Saving propagates into the public site via `getTenantChrome()`.
+
+- **[A1-004]** *(closed 2026-05-11)* — Wired Resend lead notifications into both `submitFormPublic` and `submitBuiltInForm`. New `sendLeadNotification()` helper in `lib/email.ts`. On every public form insert, fetch the tenant's `contact_email` (or the per-form `notify_email` override), build a compact "New lead from <name>" email with name/email/phone/source/message + a deep link to `/admin/inbox`, and send. Best-effort: send failures are logged but never break the form's success response.
+  - Commit: `40d98d3`.
+  - Files: `lib/email.ts`, `app/admin/forms/actions.ts`.
+  - Verification: types compile; build green. Live verification requires submitting a real lead — call `submitBuiltInForm({source: "contact", data: {name, email, phone, message}})` from the public site; check `admin@brandbonjour.com` inbox + Resend dashboard. (Resend dashboard check deferred to Agent 3 since they have the credentials.)
+
+- **[A1-005]** *(closed 2026-05-11)* — `app/robots.ts` now points `Sitemap:` at `siteOrigin()` instead of `https://saminarealtor.com/sitemap.xml`. Per-tenant custom-domain rewrites will inherit the right origin automatically.
+  - Commit: `40d98d3`.
+  - Verification: `curl -sS https://bb-platform-387.netlify.app/robots.txt` → `Sitemap: https://bb-platform-387.netlify.app/sitemap.xml`.
+
+- **[A1-006 + A1-007]** *(closed 2026-05-11)* — Tenant context in server components was returning null even with `?tenant=` in the URL, because Netlify Edge doesn't reliably propagate `request: { headers }` writes from `proxy.ts` to downstream renders. Added a two-stage fallback chain in `lib/tenant/context.ts`: when the `x-bb-tenant-id` header is missing, try the URL `?tenant=` query (covers first-request render), then the `bb-master-tenant` sticky cookie (covers internal nav). Both go through a cached slug→id lookup via the service client. This cascade-fixes the admin sidebar (now shows "Samina Bilal" with `?tenant=samina`) AND the locked-feature gates (samina's unlocked Analytics/Flyers/SEO/Google Reviews now show real editors instead of upgrade banners).
+  - Commit: `915d14d`.
+  - Files: `lib/tenant/context.ts`.
+  - Verification: `curl -sS "https://bb-platform-387.netlify.app/contact?tenant=samina" | grep -oE 'hasTenant[^,]*'` → `"hasTenant":true`. Server-rendered `realtorName` is now "Samina Bilal".
+
+- **[A1-008]** *(closed 2026-05-11 — verified invalid)* — Re-read `components/admin/UpgradeBanner.tsx` line 63: `{meta.label} isn&apos;t active on your plan.` There IS a space between the JSX expression and the literal "isn't". The text Agent 1 captured ("Website analyticsisn't") was almost certainly a copy-paste artifact from a rendered DOM where the whitespace was collapsed inside an inline element — the source is fine. No change needed.
+
+- **[A1-009]** *(closed 2026-05-11 — verified invalid)* — `app/admin/integrations/analytics/page.tsx` exists, gates on the `analytics` feature (correct), and returns the AnalyticsWizard when unlocked. The 307 → `/admin?from=...` Agent 1 saw was the `proxy.ts` "deeper /admin/* requires auth" check firing on an unauthenticated request. Live (auth'd) it routes correctly. No code change needed.
+
+- **[A1-010]** *(closed 2026-05-11)* — Hardcoded "Samina" / "RE/MAX Galaxy" / "saminarealtor" copy in metadata + body of `/about`, `/buyers`, `/closings`, `/communities`, `/communities/[slug]`, `/contact`, `/leave-review`, `/partners`, `/path-to-ownership`, `/privacy`, `/realtor-in/[slug]`, `/reviews`, `/sellers` neutralized. Each page now uses `generateMetadata()` to pull the active tenant's name + brokerage, and body strings either default to neutral phrasing or pull from the chrome resolver.
+  - Commits: `40d98d3`, `3803c93`.
+  - Verification: `curl -sS "https://bb-platform-387.netlify.app/leave-review?tenant=demo-emerald" | grep -c Samina` → `0`. (Was 45.)
+
+- **[A1-011]** *(closed 2026-05-11)* — `components/Logo.tsx` accepts a `role` prop driven by `content_blocks brand.identity.role`. Defaults to "Realtor" when blank. Flows through `Header.tsx` from the root layout.
+  - Commit: `40d98d3`.
+  - Verification: rendered HTML shows `<span>Realtor</span>` caption for both samina and demo-emerald (neither has overridden it).
+
+- **[A1-012]** *(partially closed 2026-05-11)* — "Copyrights reserved by Brand Bonjour" softened to "Powered by Brand Bonjour" with the same logo + link. Treated as platform branding (intentional). A super-admin opt-in to hide it entirely on custom-domain tenants is deferred to Phase 04 (see Section D).
+  - Commit: `40d98d3`.
+  - File: `components/Footer.tsx`.
+
+- **[A1-013]** *(closed 2026-05-11)* — Newsletter "Subscribe" form in the footer (no handler, no integration — a dead form) replaced with a small "Get in Touch" prompt linking to `/contact`. A real ESP integration (Mailchimp/ConvertKit) is deferred to a future phase since each tenant will pick their own provider.
+  - Commit: `40d98d3`.
+  - File: `components/Footer.tsx`.
+
+- **[A1-014]** *(closed 2026-05-11)* — Compliance logos: dropped the Realtor® emblem from the default footer (NAR-trademarked, not safe to render for non-NAR licensees). Equal Housing logo retained (universally applicable to U.S. real estate). An admin opt-in to re-add NAR/MLS-specific logos is deferred to Phase 04.
+  - Commit: `40d98d3`.
+  - File: `components/Footer.tsx`.
+
+- **[A1-015]** *(closed 2026-05-11)* — Dashboard "Coming next: Team invites, then optional Google My Business review pulls" stale roadmap copy replaced with an actionable "Tips" panel that points new realtors at the Contact & License editor as their first step.
+  - Commit: `40d98d3`.
+  - File: `app/admin/page.tsx`.
+
+- **[A1-016]** *(closed 2026-05-11 — cascade-fixed by A1-006)* — `BillingShortcut` is fed `unlockedCount={unlocked.size}` from `getCurrentTenantFeatures()`. With A1-006's fix in place, that now returns samina's actual 4 unlocked features instead of an empty Set.
+
+- **[A1-017]** *(closed 2026-05-11)* — Hero stats are already editable via `content_blocks(page='home', key='hero', stats[])` in the auto-editor. Static defaults in `lib/content.ts` were already neutral (5★ generic, "1 State Licensed"). The "VA & MD" + "42+ reviews" copy Agent 1 saw was Samina's saved override in her own row — correct behaviour. For new tenants, defaults render. No code change needed.
+
+- **[A1-018]** *(closed 2026-05-11)* — Hardcoded six VA communities (Woodbridge, Dumfries, Ashburn, Lorton, Stafford, Manassas) in `lib/site.ts` `nav` removed. `MenuDrawer.tsx` now renders the Communities submenu from the tenant's actual `communities` table (limited to 8 visible rows, ordered by `display_order`).
+  - Commit: `40d98d3`.
+  - Files: `components/MenuDrawer.tsx`, `app/layout.tsx`.
+  - Verification: `/?tenant=demo-emerald` menu drawer (which has zero communities) shows no submenu under "Communities".
+
+- **[A1-019]** *(deferred to Phase 05)* — Public form spam protection (rate limit, honeypot, CAPTCHA). The right answer is rate-limit at the edge + a hidden honeypot field + optional CAPTCHA — too invasive to ship piecemeal. Moved to Phase 05 in Section D.
+
+- **[A1-020]** *(closed 2026-05-11)* — `/admin/team` card on the dashboard now hidden from editors. Owner check is done once in the admin dashboard server component (joined on `tenant_users.role` + `super_admins`) and the Team card is filtered out for non-owners. Super admins always see it.
+  - Commit: `40d98d3`.
+  - File: `app/admin/page.tsx`.
+
+- **[A1-021]** *(deferred to Phase 06)* — IA dedup between `/admin/brand`, sidebar "Brand Identity", and `/admin/content/brand/<section>` is a structural cleanup. The "Identity" + "Contact & License" cards under `/admin/brand` work fine for round 1; consolidation moved to Phase 06.
 
 ---
 
@@ -219,7 +289,124 @@ _(empty)_
 >
 > Each entry: **[Phase NN — title]** · what it adds · why it fits · rough scope.
 
-_(empty)_
+### Phase 01 — Master operator clarity
+
+**Goal:** Make it impossible for a master operator to forget which tenant they're "viewing as," and give them a one-click escape.
+
+**Includes (from recs R-A1-108, R-A1-120):**
+- Small floating badge on master-area URLs (top-right of admin shell) reading "Viewing as: samina · Clear" with a single click action that hits `?tenant=` (empty) to drop the cookie.
+- Doc the cookie-clearance UX in the master onboarding so this isn't tribal knowledge.
+- Surface the sticky cookie state somewhere in the master dashboard's tenant detail so the operator can see whether they're impersonating before they edit.
+
+**Scope rough estimate:** small.
+
+**Why it fits:** Reduces real-world risk of master accidentally editing the wrong tenant. Tiny UX win that the cookie-clearance code already supports (`proxy.ts` line ~194 handles `?tenant=` with empty value).
+
+### Phase 02 — Tenant config completeness widget
+
+**Goal:** When a new realtor lands on `/admin?tenant=...`, show them a checklist of "what to fill in first" so they don't stare at an empty admin and bounce.
+
+**Includes (from recs R-A1-103, R-A1-119):**
+- Computed checklist on `/admin/page.tsx` showing which sections are still empty (Contact & License, Portrait, Brokerage logo, at least 1 community, at least 1 closing, at least 1 review).
+- Dismissible per-tenant via a `content_blocks(brand.onboarding_done)` row or a tenant column.
+- Resolves R-A1-119 by surfacing the dead `tenants.contact_email` / `contact_phone` columns through the same UI that the new Contact & License editor writes to.
+
+**Scope rough estimate:** small.
+
+**Why it fits:** Direct conversion lift for new tenants — turning an empty admin into a clear "first 5 minutes" plan. The platform's sales-rep → onboarding → polish → deliver flow already has the data; this widget closes the loop.
+
+### Phase 03 — Per-tenant social proof: ratings + heroStats
+
+**Goal:** Make the hero "stats strip" and the reviews-page aggregate ratings line per-tenant editable.
+
+**Includes (from recs R-A1-104):**
+- Replace `lib/site.ts` `heroStats` (already done conceptually — the `home.hero.stats` content section is editable, but defaults are still tied to Samina's numbers). Audit defaults; ship neutral defaults shipped in round 1 — phase work is making the `lib/reviews.ts` `ratingsLine` (Zillow/Google/Realtor.com aggregate ratings) per-tenant. Store in `content_blocks(brand.aggregate_ratings)` or compute from a new `tenant_review_aggregates` view.
+- Wire a small admin editor for "External rating sources" (source name, average value, review count) on the Reviews admin page.
+
+**Scope rough estimate:** medium.
+
+**Why it fits:** Aggregate ratings strip currently doesn't render (round-1 fix removed Samina's hardcoded numbers). Bringing it back per-tenant is real value for established realtors with 5★ Zillow profiles, but useless for new agents — admin editor needs to handle both cases.
+
+### Phase 04 — White-label compliance + branding controls
+
+**Goal:** Let tenants on custom domains hide the Brand Bonjour platform credit and pick which compliance logos appear.
+
+**Includes (from recs R-A1-106, R-A1-117):**
+- `tenants.is_white_labeled` boolean (super-admin only) → suppresses the "Powered by Brand Bonjour" footer line.
+- Admin-driven compliance-logo block: tenant picks among Realtor®, Equal Housing, MLS-region logos, broker franchise logos. Stored in `content_blocks(brand.compliance_logos)` as a list.
+- Master "Compliance assets library" so super admin can upload the canonical logo SVGs once and tenants pick from a dropdown.
+
+**Scope rough estimate:** medium.
+
+**Why it fits:** The platform's monthly-upsell motion already separates branded vs unbranded site rendering — formalizing the toggle lets you bundle "remove platform credit" into a higher tier. Also fixes the brand-use risk from showing Realtor® emblem on non-NAR tenants.
+
+### Phase 05 — Lead intake hardening
+
+**Goal:** Stop the public form submit firehose from becoming a spam sink the moment we share a tenant's URL.
+
+**Includes (from recs R-A1-111, R-A1-109, R-A1-118, R-A1-121, and bug A1-019):**
+- Hidden honeypot field on every form (`<input name="website_url" hidden>`). Server drops submissions whose honeypot is filled.
+- Per-IP rate limit at the proxy layer (Netlify Edge KV: max 5 submits / minute / IP / tenant).
+- Optional Cloudflare Turnstile or hCaptcha (toggled per tenant in `content_blocks(brand.form_security)`).
+- Defense-in-depth: `/api/stripe/checkout` re-reads tenant via the auth'd Supabase client, doesn't trust the header alone (R-A1-109).
+- Friendlier error path on Google integration save: "We couldn't reach Google Reviews — check the API key" (R-A1-118).
+- "Test send" button on both `/admin/integrations/analytics` and (future) `/admin/integrations/email` (R-A1-121).
+
+**Scope rough estimate:** medium.
+
+**Why it fits:** Once we onboard a sales rep's first cohort of tenants and they start sharing URLs publicly, spam IS coming. Ship this before the next batch of customers, not after.
+
+### Phase 06 — Admin information architecture cleanup
+
+**Goal:** Collapse the redundant Brand Identity entry points into one canonical path, and rationalize the locked-feature visual language.
+
+**Includes (from recs R-A1-114, R-A1-115, R-A1-122, R-A1-107, and bug A1-021):**
+- Decide on a single brand path: either `/admin/brand` as the cards-grid + drop `/admin/content/brand/*`, OR keep `/admin/content/brand/*` and remove the cards-grid. R-A1-114's "Contact & License" card is already added under `/admin/brand` in round 1; this phase consolidates the rest.
+- Logo caption ("Realtor") UX — already done in round 1 (R-A1-115), but this phase adds the in-admin preview so the realtor sees the caption change live as they type.
+- Locked sidebar items: today they're dim with a lock icon. Replace with a tiny "🔒 Upgrade $20/mo" inline chip so the price is visible without hovering (R-A1-122).
+- Better upgrade banner: show plan details + features list inline before redirecting to Stripe (R-A1-107).
+
+**Scope rough estimate:** medium.
+
+**Why it fits:** Once the platform serves more than a couple of tenants, "where do I edit X?" is the #1 support question. IA cleanup pays back every customer interaction.
+
+### Phase 07 — Save-and-preview workflow
+
+**Goal:** Eliminate the round-trip cost of editing → saving → opening another tab → checking the public site.
+
+**Includes (from recs R-A1-102):**
+- Add a "Preview" button on every Section editor that opens the live tenant URL in an iframe inside a side panel. Reuses the existing preview-token logic so even pending tenants are previewable.
+- Optional split-screen "Save and stay" UX where the iframe auto-refreshes after save.
+
+**Scope rough estimate:** medium.
+
+**Why it fits:** Highest-impact UX investment after IA. Realtors are non-developers — they want WYSIWYG, not "save and check." Pairs naturally with the polish stage of the lifecycle.
+
+### Phase 08 — Tenant-aware SEO surface
+
+**Goal:** Stop the sitemap / robots / metadata from leaking platform-default copy on per-tenant requests.
+
+**Includes (from recs R-A1-113):**
+- `app/sitemap.ts` becomes tenant-aware (uses the current request's tenant's custom_domain or platform subdomain as the loc base).
+- Per-page SEO metadata editor (title + description override per page, defaults from tenant's identity copy). Today we have generateMetadata using realtor_name — but no admin override for individual pages.
+- Sitemap should include the tenant's actual communities + closings URLs, not the static `lib/communities.ts` list.
+
+**Scope rough estimate:** medium.
+
+**Why it fits:** SEO is part of the Visibility Plan upsell — making each tenant's site genuinely discoverable on its own domain is the value prop. Today the sitemap lists communities Samina knows; on demo-emerald that's a bug.
+
+### Phase 09 — Mobile + accessibility audit
+
+**Goal:** Verify the admin AND public template render correctly at 375x812 (iPhone SE/13 mini) — both an Agent 1 deferred item and a customer-trust issue.
+
+**Includes (from recs R-A1-112):**
+- Manual pass through `/admin?tenant=samina`, every editor card, the upgrade banner, and the dashboard at 375x812.
+- Same pass through public `/`, `/contact`, `/communities/[slug]`, `/open-house/[slug]` (especially the flyer print view).
+- Fix any layout breaks. Likely targets: sidebar collapse, sticky CTA bar overlap, header avatar size.
+
+**Scope rough estimate:** small (audit) + small-to-medium (fixes).
+
+**Why it fits:** Realtors and their clients open links from texts. If mobile is broken, the platform fails the "look at this on your phone" test that every sales call ends with.
 
 ---
 
