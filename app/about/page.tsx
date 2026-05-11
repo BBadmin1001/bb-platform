@@ -7,12 +7,19 @@ import {
 } from "@/lib/contentLoader";
 import ShimmerText from "@/components/ShimmerText";
 import DarkBreak from "@/components/DarkBreak";
+import { getCurrentTenant } from "@/lib/tenant/context";
 
-export const metadata = {
-  title: "About Samina Bilal | RE/MAX Galaxy Realtor — VA & MD",
-  description:
-    "Samina Bilal is a Realtor with RE/MAX Galaxy, dual-licensed in Virginia and Maryland. Speaks English, Urdu, and Hindi. Based in Woodbridge.",
-};
+export async function generateMetadata() {
+  const tenant = await getCurrentTenant();
+  const name = tenant?.realtor_name?.trim();
+  const brokerage = tenant?.brokerage?.trim();
+  return {
+    title: name ? `About ${name}` : "About",
+    description: name
+      ? `${name}${brokerage ? ` is a Realtor with ${brokerage}` : " — Realtor"}.`
+      : "About the realtor.",
+  };
+}
 
 export const dynamic = "force-dynamic";
 

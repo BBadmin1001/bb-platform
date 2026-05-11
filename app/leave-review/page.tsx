@@ -32,26 +32,29 @@ export default async function LeaveReviewPage() {
     <section className="min-h-screen bg-cream-soft pt-24 pb-24 px-6">
       <div className="max-w-2xl mx-auto">
         {/* Big circular portrait — square Cloudinary crop, masked round
-            via aspect-square + rounded-full. Decorative ring + soft
-            glow lift it off the cream background. */}
-        <div className="flex justify-center mb-8">
-          <div
-            className="relative w-44 h-44 md:w-56 md:h-56 rounded-full overflow-hidden ring-4 ring-white"
-            style={{
-              boxShadow:
-                "0 30px 60px -20px rgba(20, 40, 64, 0.25), 0 0 0 1px rgba(20, 40, 64, 0.06)",
-            }}
-          >
-            <Image
-              src={portrait.avatar}
-              alt={realtorName}
-              fill
-              sizes="(min-width: 768px) 14rem, 11rem"
-              className="object-cover"
-              priority
-            />
+            via aspect-square + rounded-full. Only rendered when the
+            tenant has uploaded a portrait (otherwise we'd display a
+            stale fallback for tenants that haven't set theirs yet). */}
+        {portrait.avatar && (
+          <div className="flex justify-center mb-8">
+            <div
+              className="relative w-44 h-44 md:w-56 md:h-56 rounded-full overflow-hidden ring-4 ring-white"
+              style={{
+                boxShadow:
+                  "0 30px 60px -20px rgba(20, 40, 64, 0.25), 0 0 0 1px rgba(20, 40, 64, 0.06)",
+              }}
+            >
+              <Image
+                src={portrait.avatar}
+                alt={realtorName}
+                fill
+                sizes="(min-width: 768px) 14rem, 11rem"
+                className="object-cover"
+                priority
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <p
           className="text-[0.65rem] tracking-[0.32em] uppercase text-ink/55 mb-3 text-center"

@@ -4,12 +4,19 @@ import Counter from "@/components/Counter";
 import StackedCards from "@/components/StackedCards";
 import DarkBreak from "@/components/DarkBreak";
 import { getPageContent, getSection, resolveImageUrl } from "@/lib/contentLoader";
+import { getCurrentTenant } from "@/lib/tenant/context";
 
-export const metadata = {
-  title: "Path to Ownership | Renter to Homeowner — Samina Bilal",
-  description:
-    "A guided 12-to-24 month plan to take you from renting to closing. Free consultation. No pressure.",
-};
+export async function generateMetadata() {
+  const tenant = await getCurrentTenant();
+  const name = tenant?.realtor_name?.trim();
+  return {
+    title: name
+      ? `Path to Ownership | Renter to Homeowner — ${name}`
+      : "Path to Ownership | Renter to Homeowner",
+    description:
+      "A guided 12-to-24 month plan to take you from renting to closing. Free consultation. No pressure.",
+  };
+}
 
 export const dynamic = "force-dynamic";
 

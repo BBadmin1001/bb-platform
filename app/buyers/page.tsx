@@ -15,12 +15,17 @@ import { getPageContent, getSection, resolveImageUrl } from "@/lib/contentLoader
 import ShimmerText from "@/components/ShimmerText";
 import DarkBreak from "@/components/DarkBreak";
 import ProcessTimeline from "@/components/ProcessTimeline";
+import { getCurrentTenant } from "@/lib/tenant/context";
 
-export const metadata = {
-  title: "Buying a Home | Samina Bilal — VA & MD Buyer's Agent",
-  description:
-    "First home or fifth — Samina makes the buying process feel calm. Local market knowledge, sharp negotiation, end-to-end representation across Northern Virginia and Maryland.",
-};
+export async function generateMetadata() {
+  const tenant = await getCurrentTenant();
+  const name = tenant?.realtor_name?.trim();
+  return {
+    title: name ? `Buying a Home | ${name}` : "Buying a Home",
+    description:
+      "First home or fifth — local market knowledge, sharp negotiation, end-to-end representation.",
+  };
+}
 
 export const dynamic = "force-dynamic";
 

@@ -340,14 +340,16 @@ export default async function OpenHousePage({
             <div className="grid grid-cols-12 gap-4 md:gap-5 items-center">
               {/* LEFT — realtor card */}
               <div className="col-span-5 flex items-center gap-3">
-                <div className="relative w-14 h-14 md:w-[60px] md:h-[60px] rounded-full overflow-hidden ring-2 ring-white/30 shrink-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={portrait.avatar}
-                    alt={chrome.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+                {portrait.avatar && (
+                  <div className="relative w-14 h-14 md:w-[60px] md:h-[60px] rounded-full overflow-hidden ring-2 ring-white/30 shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={portrait.avatar}
+                      alt={chrome.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
                 <div className="min-w-0">
                   <p
                     className="text-[0.85rem] md:text-[0.92rem] leading-tight"

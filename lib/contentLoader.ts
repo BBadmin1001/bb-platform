@@ -404,8 +404,11 @@ export async function getBrand() {
  *   • The picked media row has been deleted
  */
 export async function getPortrait(): Promise<{ full: string; avatar: string }> {
-  const { site } = await import("./site");
-  const fallback = { full: site.portrait.full, avatar: site.portrait.avatar };
+  // No more importing the Samina headshot as a default — leaking one
+  // tenant's portrait into another tenant's chrome was bug A1-002.
+  // Empty strings flow downstream and consuming components (Logo,
+  // Footer, MenuDrawer) treat empty avatars as "render no avatar".
+  const fallback = { full: "", avatar: "" };
 
   try {
     const supabase = getServiceClient();
@@ -606,10 +609,11 @@ export async function getFavicon(): Promise<string> {
     });
   }
 
-  // 3) No Cloudinary asset → fall back to the static path. Will render
-  // square in the tab until the admin uploads a real favicon.
+  // 3) No Cloudinary asset → fall back to the platform's static
+  // favicon (a neutral generic placeholder, NOT one tenant's
+  // headshot). Browsers render this until the admin uploads one.
   const staticPortrait = await getPortrait();
-  return staticPortrait.avatar;
+  return staticPortrait.avatar || "/images/Brand%20Bonjour%20Logo.png.png";
 }
 
 /** Site-wide social-share image (default OG image). */

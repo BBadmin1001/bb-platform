@@ -153,20 +153,34 @@ export default function AdminSidebar({
           aria-label="Admin dashboard"
         >
           <span
-            className="relative shrink-0 w-12 h-12 rounded-full overflow-hidden"
+            className="relative shrink-0 w-12 h-12 rounded-full overflow-hidden flex items-center justify-center"
             style={{
               boxShadow:
                 "0 0 0 2px var(--sidebar), 0 0 0 3px color-mix(in srgb, var(--primary) 35%, transparent), 0 4px 10px -2px rgba(0,0,0,0.18)",
+              background:
+                "color-mix(in srgb, var(--primary) 12%, var(--sidebar))",
             }}
           >
-            <NextImage
-              src={portraitUrl}
-              alt={realtorName ?? ""}
-              fill
-              sizes="48px"
-              className="object-cover transition-transform duration-500 group-hover:scale-110"
-              priority
-            />
+            {portraitUrl ? (
+              <NextImage
+                src={portraitUrl}
+                alt={realtorName ?? ""}
+                fill
+                sizes="48px"
+                className="object-cover transition-transform duration-500 group-hover:scale-110"
+                priority
+              />
+            ) : (
+              <span
+                className="text-sm uppercase"
+                style={{ color: "var(--primary)", fontWeight: 600 }}
+              >
+                {/* First initial of realtor name as a fallback when no
+                    portrait has been uploaded yet — no longer leaks
+                    Samina's headshot onto other tenants. */}
+                {(realtorName ?? "").trim().charAt(0) || "·"}
+              </span>
+            )}
           </span>
           <span className="min-w-0">
             <span

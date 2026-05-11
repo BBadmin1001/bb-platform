@@ -2,12 +2,17 @@ import { getReviews, ratingsLine } from "@/lib/reviewsLoader";
 import Link from "next/link";
 import ShimmerText from "@/components/ShimmerText";
 import { getPageContent, resolveImageUrl } from "@/lib/contentLoader";
+import { getCurrentTenant } from "@/lib/tenant/context";
 
-export const metadata = {
-  title: "Reviews | Samina Bilal",
-  description:
-    "Five-star ratings across Zillow, Google, and Realtor.com. In their own words.",
-};
+export async function generateMetadata() {
+  const tenant = await getCurrentTenant();
+  const name = tenant?.realtor_name?.trim();
+  return {
+    title: name ? `Reviews | ${name}` : "Reviews",
+    description:
+      "Client reviews across Zillow, Google, Realtor.com — in their own words.",
+  };
+}
 
 export const dynamic = "force-dynamic";
 

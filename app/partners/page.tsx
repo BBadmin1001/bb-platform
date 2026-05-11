@@ -4,12 +4,17 @@ import ShimmerText from "@/components/ShimmerText";
 import DarkBreak from "@/components/DarkBreak";
 import { getPageContent, getSection, resolveImageUrl } from "@/lib/contentLoader";
 import { getPartnerCategories } from "@/lib/partnersLoader";
+import { getCurrentTenant } from "@/lib/tenant/context";
 
-export const metadata = {
-  title: "Trusted Partners | Samina Bilal",
-  description:
-    "The lenders, inspectors, insurance agents, and trades Samina trusts with her own clients. Real names, real contact info, no kickbacks.",
-};
+export async function generateMetadata() {
+  const tenant = await getCurrentTenant();
+  const name = tenant?.realtor_name?.trim();
+  const firstName = name?.split(/\s+/)[0] || "the realtor";
+  return {
+    title: name ? `Trusted Partners | ${name}` : "Trusted Partners",
+    description: `The lenders, inspectors, insurance agents, and trades ${firstName} trusts with their own clients. Real names, real contact info, no kickbacks.`,
+  };
+}
 
 export const dynamic = "force-dynamic";
 

@@ -3,12 +3,17 @@ import DarkBreak from "@/components/DarkBreak";
 import ShimmerText from "@/components/ShimmerText";
 import { getCommunities } from "@/lib/communitiesLoader";
 import { getPageContent, resolveImageUrl } from "@/lib/contentLoader";
+import { getCurrentTenant } from "@/lib/tenant/context";
 
-export const metadata = {
-  title: "Communities | Northern Virginia & Maryland Real Estate",
-  description:
-    "Six neighborhoods Samina knows by street name. Real 2026 market data for Woodbridge, Dumfries, Ashburn, Lorton, Stafford, and Manassas.",
-};
+export async function generateMetadata() {
+  const tenant = await getCurrentTenant();
+  const name = tenant?.realtor_name?.trim();
+  return {
+    title: name ? `Communities | ${name}` : "Communities",
+    description:
+      "Neighborhoods we serve — with current market data and a local read on each.",
+  };
+}
 
 export const dynamic = "force-dynamic";
 
