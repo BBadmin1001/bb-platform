@@ -36,11 +36,31 @@ const ADMIN_PUBLIC_PATHS = new Set([
   "/admin/reset-password",
 ]);
 
+/** Cookie that remembers which tenant a master operator is currently
+ *  "viewing as." Set when ?tenant=<slug> hits a URL, read on later
+ *  requests so internal admin navigation (which strips the query)
+ *  stays in that tenant's context. Safe to set unconditionally: the
+ *  cookie only SCOPES the admin UI; every actual write still goes
+ *  through requireTenantUser which validates membership or
+ *  super_admin status before mutating data. */
+const MASTER_TENANT_COOKIE = "bb-master-tenant";
+
 export async function proxy(request: NextRequest) {
   const url = new URL(request.url);
   const host = request.headers.get("host") ?? url.host;
 
-  const ctx = await resolveTenant(host, url.searchParams);
+  // Build an "effective" searchParams that falls back to the sticky
+  // cookie when no explicit ?tenant= is in the URL. This is the fix
+  // for "no tenant in context" errors after navigating inside the
+  // admin via a normal <Link> that doesn't preserve the query.
+  const explicitTenant = url.searchParams.get("tenant");
+  const cookieTenant = request.cookies.get(MASTER_TENANT_COOKIE)?.value;
+  const effectiveSearchParams = new URLSearchParams(url.searchParams);
+  if (!explicitTenant && cookieTenant) {
+    effectiveSearchParams.set("tenant", cookieTenant);
+  }
+
+  const ctx = await resolveTenant(host, effectiveSearchParams);
 
   // ── Auth refresh + /admin gate ─────────────────────────────────────
   // Build a mutable response so Supabase can write refreshed auth
@@ -154,6 +174,27 @@ export async function proxy(request: NextRequest) {
   response.cookies.getAll().forEach((cookie) => {
     finalResponse.cookies.set(cookie);
   });
+
+  // Persist the master "viewing as" tenant choice in a cookie so that
+  // internal admin links (which don't carry ?tenant=) keep the
+  // tenant in context. Set the cookie:
+  //
+  //   - on explicit ?tenant=<slug>, IF the resolver actually matched
+  //     that slug (avoids saving an invalid slug into the cookie),
+  //   - clear the cookie when the URL says ?tenant= without a value
+  //     (poor-man's "exit master view").
+  if (explicitTenant && ctx.kind === "tenant" && ctx.tenant.slug === explicitTenant.toLowerCase()) {
+    finalResponse.cookies.set(MASTER_TENANT_COOKIE, ctx.tenant.slug, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 8, // 8 hours — refreshed every time master clicks "Open admin"
+    });
+  } else if (url.searchParams.has("tenant") && !explicitTenant) {
+    // ?tenant= with empty value → explicit clear
+    finalResponse.cookies.delete(MASTER_TENANT_COOKIE);
+  }
 
   return finalResponse;
 }
