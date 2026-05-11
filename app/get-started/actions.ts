@@ -91,6 +91,10 @@ export type WizardSubmitInput = {
   intakeData: IntakeData;
   salesRepRef: string | null;
   agreedSetupCents: number | null;
+  /** When set, the server re-resolves the link token from the DB
+   *  and PROVENANCE-WINS over the URL-supplied price + rep. This is
+   *  how we stop customers from editing the URL to lower their price. */
+  linkToken?: string | null;
 };
 
 export type WizardSubmitResult =
@@ -124,6 +128,46 @@ export async function submitIntakeWizard(
     return { ok: false, error: "Agreed price is invalid." };
   }
 
+  // ── 1b. seal — when a link token is in play, re-resolve the
+  // canonical price + rep ref from the DB and use THOSE instead of
+  // whatever the client posted. This is the sealing guarantee.
+  let sealedSetupCents = input.agreedSetupCents;
+  let sealedRepRef = input.salesRepRef;
+  let linkRowId: string | null = null;
+  if (input.linkToken) {
+    const supabase = await createClient();
+    const { data: linkRow } = await supabase
+      .from("sales_rep_links")
+      .select(
+        "id, agreed_setup_cents, is_active, sales_reps!inner(slug)",
+      )
+      .eq("link_token", input.linkToken)
+      .maybeSingle();
+    if (!linkRow) {
+      return {
+        ok: false,
+        error:
+          "This onboarding link is no longer valid. Ask your sales rep for a fresh one.",
+      };
+    }
+    if (!linkRow.is_active) {
+      return {
+        ok: false,
+        error:
+          "This onboarding link has been deactivated. Ask your sales rep for a fresh one.",
+      };
+    }
+    sealedSetupCents = linkRow.agreed_setup_cents as number;
+    const reps = linkRow.sales_reps as
+      | { slug: string }
+      | { slug: string }[]
+      | null;
+    sealedRepRef = Array.isArray(reps)
+      ? (reps[0]?.slug ?? null)
+      : reps?.slug ?? null;
+    linkRowId = linkRow.id as string;
+  }
+
   // Source attribution — same convention as the legacy short form.
   const tenantSlug = await getCurrentTenantSlug();
   const source = tenantSlug ? `referral:${tenantSlug}` : "website";
@@ -150,12 +194,14 @@ export async function submitIntakeWizard(
       notes: d.notes?.trim() || null,
       source,
       status: "new",
-      // New columns (Phase 7.1 migration)
+      // New columns (Phase 7.1 + 18 migration). When a link token
+      // was used, sealedRepRef / sealedSetupCents reflect the DB
+      // values, not whatever the client posted.
       intake_data: d,
-      sales_rep_ref: input.salesRepRef,
-      agreed_setup_cents: input.agreedSetupCents,
+      sales_rep_ref: sealedRepRef,
+      agreed_setup_cents: sealedSetupCents,
       intake_submitted_at: new Date().toISOString(),
-      quoted_setup_fee_cents: input.agreedSetupCents,
+      quoted_setup_fee_cents: sealedSetupCents,
     })
     .select("id")
     .single();
@@ -166,12 +212,25 @@ export async function submitIntakeWizard(
     };
   }
 
+  // If this prospect came in via a tracked link, stamp the link row
+  // with submitted_at + prospect_id for conversion analytics.
+  if (linkRowId) {
+    const supabase = await createClient();
+    await supabase
+      .from("sales_rep_links")
+      .update({
+        submitted_at: new Date().toISOString(),
+        prospect_id: prospect.id,
+      })
+      .eq("id", linkRowId);
+  }
+
   revalidatePath("/master/prospects");
   revalidatePath("/master");
 
   // ── 3. auto-Stripe (when price was pre-agreed) ───────────────
   let checkoutUrl: string | null = null;
-  if (input.agreedSetupCents !== null && input.agreedSetupCents > 0) {
+  if (sealedSetupCents !== null && sealedSetupCents > 0) {
     if (!isStripeConfigured()) {
       // Stripe missing in env — save the prospect and let master
       // handle billing manually. Don't fail the submit.
@@ -193,7 +252,7 @@ export async function submitIntakeWizard(
             contact_name,
             email,
           },
-          setupFeeCents: input.agreedSetupCents,
+          setupFeeCents: sealedSetupCents,
           recurringPriceIds: [], // monthly add-ons are upsold post-delivery
           successUrl,
         });
@@ -224,14 +283,14 @@ export async function submitIntakeWizard(
   // Internal alert when a price was pre-agreed (i.e. they're going
   // straight to checkout). Cold leads with no price get the alert
   // when master generates the quote.
-  if (input.agreedSetupCents !== null && input.agreedSetupCents > 0) {
+  if (sealedSetupCents !== null && sealedSetupCents > 0) {
     void sendInternalNewPaidProspect({
       prospectId: prospect.id,
       contactName: contact_name,
       brokerage: brokerage_name,
       email,
-      agreedSetupCents: input.agreedSetupCents,
-      salesRepRef: input.salesRepRef,
+      agreedSetupCents: sealedSetupCents,
+      salesRepRef: sealedRepRef,
     });
   }
 

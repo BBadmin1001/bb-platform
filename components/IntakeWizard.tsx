@@ -80,19 +80,47 @@ const US_STATES: { abbr: string; name: string }[] = [
   { abbr: "DC", name: "District of Columbia" },
 ];
 
-export default function IntakeWizard() {
+export default function IntakeWizard({
+  linkToken = null,
+  sealedAgreedSetupCents = null,
+  sealedSalesRepRef = null,
+  prefillEmail = null,
+}: {
+  /** Set when the URL had `?link=<token>` that resolved to a real
+   *  active link row. The submit action re-validates this on the
+   *  server and pulls price + rep from the DB, so the URL is no
+   *  longer trusted as the source of truth for the price. */
+  linkToken?: string | null;
+  sealedAgreedSetupCents?: number | null;
+  sealedSalesRepRef?: string | null;
+  prefillEmail?: string | null;
+} = {}) {
   const router = useRouter();
   const params = useSearchParams();
-  const salesRepRef = (params.get("ref") || "").toLowerCase().trim() || null;
+  // Sealed values (from a link token) take precedence over the legacy
+  // ?ref= / ?price= URL params, which only act as a fallback for
+  // direct-paste flows (master testing, retired one-off campaigns).
+  const salesRepRef =
+    sealedSalesRepRef ||
+    ((params.get("ref") || "").toLowerCase().trim() || null);
   const agreedPriceParam = params.get("price");
-  const agreedSetupCents =
+  const fallbackPriceCents =
     agreedPriceParam && /^\d+(\.\d{1,2})?$/.test(agreedPriceParam)
       ? Math.round(Number(agreedPriceParam) * 100)
       : null;
+  // Effective agreed price the wizard uses for display + submit.
+  // Sealed > URL fallback. Final source of truth is the server-side
+  // re-resolve inside submitIntakeWizard.
+  const agreedSetupCents = sealedAgreedSetupCents ?? fallbackPriceCents;
 
   const [stepIdx, setStepIdx] = useState(0);
   const step = INTAKE_STEPS[stepIdx];
-  const [data, setData] = useState<IntakeData>(emptyIntake);
+  const [data, setData] = useState<IntakeData>(() => {
+    const start = emptyIntake();
+    // Pre-fill the customer email when the link encoded one.
+    if (prefillEmail) start.email = prefillEmail;
+    return start;
+  });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   /** A3-015 / R-A3-213: surface a "we restored your draft" pill when
@@ -173,6 +201,10 @@ export default function IntakeWizard() {
         intakeData: data,
         salesRepRef,
         agreedSetupCents,
+        // When a sealed link token is in play, the server re-resolves
+        // the price + rep from the DB and ignores the values above.
+        // Customer cannot drop the price by editing the URL.
+        linkToken,
       });
       if (!res.ok) {
         setError(res.error);

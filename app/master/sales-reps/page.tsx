@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus, Copy, Mail, ExternalLink } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/master";
 import SalesRepManager from "@/components/master/SalesRepManager";
+import ClientLinkGenerator from "@/components/master/ClientLinkGenerator";
 
 export const dynamic = "force-dynamic";
 
@@ -18,16 +19,23 @@ export const dynamic = "force-dynamic";
 export default async function SalesRepsPage() {
   const { supabase } = await requireSuperAdmin();
 
-  const [{ data: reps }, { data: prospectStats }] = await Promise.all([
-    supabase
-      .from("sales_reps")
-      .select("id, slug, full_name, email, is_active, notes, created_at")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("prospects")
-      .select("sales_rep_ref, status, agreed_setup_cents")
-      .not("sales_rep_ref", "is", null),
-  ]);
+  const [{ data: reps }, { data: prospectStats }, { data: links }] =
+    await Promise.all([
+      supabase
+        .from("sales_reps")
+        .select("id, slug, full_name, email, is_active, notes, created_at")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("prospects")
+        .select("sales_rep_ref, status, agreed_setup_cents")
+        .not("sales_rep_ref", "is", null),
+      supabase
+        .from("sales_rep_links")
+        .select(
+          "id, rep_id, link_token, client_label, client_email, agreed_setup_cents, created_at, clicked_at, submitted_at, is_active",
+        )
+        .order("created_at", { ascending: false }),
+    ]);
 
   // Aggregate prospect counts + revenue per rep slug.
   type Stats = { total: number; paid: number; revenueCents: number };
@@ -78,6 +86,28 @@ export default async function SalesRepsPage() {
         Each rep gets a tracked onboarding link. Conversion + revenue stats
         below update automatically as their prospects pay.
       </p>
+
+      <ClientLinkGenerator
+        reps={(reps ?? []).map((r) => ({
+          id: r.id as string,
+          slug: r.slug as string,
+          full_name: r.full_name as string,
+          is_active: r.is_active as boolean,
+        }))}
+        initialLinks={(links ?? []) as Array<{
+          id: string;
+          rep_id: string;
+          link_token: string;
+          client_label: string;
+          client_email: string | null;
+          agreed_setup_cents: number;
+          created_at: string;
+          clicked_at: string | null;
+          submitted_at: string | null;
+          is_active: boolean;
+        }>}
+        masterHost={masterHost}
+      />
 
       <SalesRepManager
         initialReps={(reps ?? []) as Array<{
