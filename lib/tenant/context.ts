@@ -118,13 +118,30 @@ async function resolveSlugToTenantId(slug: string): Promise<string | null> {
   const { getServiceClient } = await import("@/lib/contentLoader");
   const supabase = getServiceClient();
   if (!supabase) return null;
-  const { data } = await supabase
+  // First try the active-tenant path (common case: public visitors).
+  const { data: activeRow } = await supabase
     .from("tenants")
     .select("id")
     .eq("slug", slug)
     .eq("status", "active")
     .maybeSingle();
-  const id = (data?.id as string | undefined) ?? null;
+  let id = (activeRow?.id as string | undefined) ?? null;
+
+  // A3-014: if no active tenant matched but the slug exists at all,
+  // we still want master operators viewing-as-tenant on a pending row
+  // to get a tenant id (so admin editors / preview pages have data
+  // context). The unguessable slug-vs-real-tenant lookup is read-only
+  // and surfaces nothing private — the same data is reachable via
+  // /master/tenants/<slug> already.
+  if (!id) {
+    const { data: anyRow } = await supabase
+      .from("tenants")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
+    id = (anyRow?.id as string | undefined) ?? null;
+  }
+
   if (id) _slugIdCache.set(slug, id);
   return id;
 }

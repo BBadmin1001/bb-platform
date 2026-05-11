@@ -435,11 +435,19 @@ export async function setTenantLifecycleStage(
         desiredDomain: tenant.custom_domain as string,
         cnameTarget: getPlatformTarget(),
       });
-    } else if (stage === "live" && tenant.custom_domain) {
+    } else if (stage === "live") {
+      // A3-008: fire "you're live" email on every live transition,
+      // even when there's no custom domain yet (falls back to the
+      // platform host with the slug query). Previously gated on
+      // `tenant.custom_domain` which meant tenants going live on the
+      // platform subdomain got zero notification.
+      const liveUrl = tenant.custom_domain
+        ? `https://${tenant.custom_domain}`
+        : `https://${masterHost}/?tenant=${slug}`;
       void sendSiteLive({
         to: tenant.contact_email as string,
         realtorName: (tenant.realtor_name as string) || "there",
-        liveUrl: `https://${tenant.custom_domain}`,
+        liveUrl,
       });
     }
   }
@@ -448,6 +456,60 @@ export async function setTenantLifecycleStage(
   revalidatePath("/master/tenants");
   revalidatePath("/master");
   return { ok: true, slug, stage };
+}
+
+/**
+ * Force-flip a tenant to `live` even when the DNS guardrails in
+ * `setTenantLifecycleStage` would block. Use this when DNS is being
+ * set up out-of-band and you want the public URL to start serving
+ * traffic the moment it resolves (or the tenant is on a Netlify
+ * subdomain with no custom domain at all).
+ *
+ * Always sets `status='active'` + `lifecycle_stage='live'` + stamps
+ * provisioned_at. Fires the "you're live" email if a contact_email
+ * is on file.
+ */
+export async function forceTenantLive(slug: string): Promise<Result> {
+  const { supabase } = await requireSuperAdmin();
+
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select(
+      "id, custom_domain, contact_email, realtor_name",
+    )
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!tenant) return { ok: false, error: "Tenant not found." };
+
+  const { error } = await supabase
+    .from("tenants")
+    .update({
+      lifecycle_stage: "live",
+      status: "active",
+      provisioned_at: new Date().toISOString(),
+    })
+    .eq("id", tenant.id);
+  if (error) return { ok: false, error: error.message };
+
+  if (tenant.contact_email) {
+    const masterHost =
+      process.env.NEXT_PUBLIC_MASTER_HOSTNAME ||
+      process.env.MASTER_HOSTNAME ||
+      "bb-platform-387.netlify.app";
+    const liveUrl = tenant.custom_domain
+      ? `https://${tenant.custom_domain}`
+      : `https://${masterHost}/?tenant=${slug}`;
+    void sendSiteLive({
+      to: tenant.contact_email as string,
+      realtorName: (tenant.realtor_name as string) || "there",
+      liveUrl,
+    });
+  }
+
+  revalidatePath(`/master/tenants/${slug}`);
+  revalidatePath("/master/tenants");
+  revalidatePath("/master");
+  return { ok: true, slug };
 }
 
 /**

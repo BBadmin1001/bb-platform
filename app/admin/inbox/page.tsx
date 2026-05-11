@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentTenantId } from "@/lib/tenant/context";
 import AdminShell from "@/components/admin/AdminShell";
 import InboxList, {
   type LeadRow,
@@ -23,6 +24,11 @@ export default async function InboxPage({
       ? sp.status
       : undefined;
 
+  // Explicit tenant scoping (A3-004): super-admins bypass RLS, so
+  // without an explicit tenant_id filter the inbox would show leads
+  // for every tenant.
+  const tenantId = await getCurrentTenantId();
+
   let query = supabase
     .from("leads")
     .select(
@@ -31,6 +37,7 @@ export default async function InboxPage({
     .order("submitted_at", { ascending: false })
     .limit(200);
 
+  if (tenantId) query = query.eq("tenant_id", tenantId);
   if (filter) {
     query = query.eq("status", filter);
   }
@@ -38,9 +45,11 @@ export default async function InboxPage({
   const { data: leads } = await query;
 
   // Counts per status, for the filter pills
-  const { data: counts } = await supabase
+  let countsQ = supabase
     .from("leads")
     .select("status", { count: "exact" });
+  if (tenantId) countsQ = countsQ.eq("tenant_id", tenantId);
+  const { data: counts } = await countsQ;
   const tally: Record<string, number> = { new: 0, "in-progress": 0, closed: 0 };
   for (const r of (counts ?? []) as { status: string }[]) {
     tally[r.status] = (tally[r.status] ?? 0) + 1;

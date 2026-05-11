@@ -28,13 +28,21 @@ export default async function ContentSectionEditorPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
+  // A3-004: tenant-scope every read so the editor never loads
+  // another tenant's saved values on this section. With more than
+  // one tenant in the DB and a super-admin viewing-as, the join from
+  // RLS alone would have allowed all rows through.
+  const { getCurrentTenantId } = await import("@/lib/tenant/context");
+  const tenantId = await getCurrentTenantId();
+
   // Read current saved value (if any)
-  const { data: row } = await supabase
+  let rowQ = supabase
     .from("content_blocks")
     .select("value")
     .eq("page", page)
-    .eq("key", sectionKey)
-    .maybeSingle();
+    .eq("key", sectionKey);
+  if (tenantId) rowQ = rowQ.eq("tenant_id", tenantId);
+  const { data: row } = await rowQ.maybeSingle();
 
   const fallback = defaultValueFor(def) as Record<string, unknown>;
   let initial: Record<string, unknown> = fallback;
@@ -50,11 +58,13 @@ export default async function ContentSectionEditorPage({
   }
 
   // Pull the full media library — image and youtube rows. Pickers filter
-  // by `kind` themselves.
-  const { data: media } = await supabase
+  // by `kind` themselves. Tenant-scoped (A3-004).
+  let mediaQ = supabase
     .from("media")
     .select("id, kind, cloudinary_public_id, url, alt")
     .order("uploaded_at", { ascending: false });
+  if (tenantId) mediaQ = mediaQ.eq("tenant_id", tenantId);
+  const { data: media } = await mediaQ;
 
   return (
     <AdminShell user={{ email: user.email ?? "" }}>

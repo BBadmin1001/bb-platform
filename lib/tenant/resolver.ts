@@ -95,6 +95,30 @@ function client() {
   return _client;
 }
 
+/**
+ * Service-role client for preview-token lookups ONLY. Bypasses RLS so
+ * the resolver can return tenants with `status='pending'` (i.e. sites
+ * that are still in the master polishing queue). Safe because the
+ * unguessable preview_token is itself the proof of authorization —
+ * equivalent in strength to a signed URL.
+ *
+ * Falls back to the anon client when SUPABASE_SERVICE_ROLE_KEY isn't
+ * configured (local dev / preview builds). In that case pending
+ * tenants won't resolve, which is acceptable for dev.
+ */
+let _serviceClient: ReturnType<typeof createSbClient> | null = null;
+function previewClient() {
+  if (_serviceClient) return _serviceClient;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) return client();
+  _serviceClient = createSbClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: (...args) => fetch(...args) },
+  });
+  return _serviceClient;
+}
+
 export async function resolveTenant(
   hostname: string,
   searchParams?: URLSearchParams,
@@ -106,9 +130,16 @@ export async function resolveTenant(
   // polish team can share a preview URL on ANY hostname (including
   // master.brandbonjour.com) and visitors see the in-progress tenant
   // site without needing the tenant to be `active`.
+  //
+  // Uses a service-role client because RLS on `tenants` blocks anon
+  // reads of pending/suspended rows, but pending rows ARE the primary
+  // use case for preview-token URLs (master shares a preview while
+  // the tenant is still in polishing). The unguessable token is the
+  // authorization proof — equivalent to a signed URL.
   const previewToken = searchParams?.get("preview");
   if (previewToken && /^[0-9a-f-]{36}$/i.test(previewToken)) {
-    const { data } = await supabase
+    const previewSupabase = previewClient();
+    const { data } = await previewSupabase
       .from("tenants")
       .select(TENANT_COLUMNS)
       .eq("preview_token", previewToken)

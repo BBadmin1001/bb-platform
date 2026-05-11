@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentTenantId } from "@/lib/tenant/context";
 import AdminShell from "@/components/admin/AdminShell";
 import ClosingsManager, {
   type ClosingRow,
@@ -15,19 +16,26 @@ export default async function ClosingsAdminPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
-  const { data: closings } = await supabase
+  // Explicit tenant scoping (A3-004).
+  const tenantId = await getCurrentTenantId();
+
+  let closingsQ = supabase
     .from("closings")
     .select(
       `id, image_id, image_crop, neighborhood, city, state, closed_year, display_order, is_visible,
        media:image_id ( cloudinary_public_id, url )`,
     )
     .order("display_order", { ascending: true });
+  if (tenantId) closingsQ = closingsQ.eq("tenant_id", tenantId);
+  const { data: closings } = await closingsQ;
 
-  const { data: media } = await supabase
+  let mediaQ = supabase
     .from("media")
     .select("id, cloudinary_public_id, url, alt")
     .eq("kind", "image")
     .order("uploaded_at", { ascending: false });
+  if (tenantId) mediaQ = mediaQ.eq("tenant_id", tenantId);
+  const { data: media } = await mediaQ;
 
   return (
     <AdminShell user={{ email: user.email ?? "" }}>

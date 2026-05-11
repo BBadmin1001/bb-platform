@@ -10,6 +10,10 @@ import {
 
 interface AdminRow {
   user_id: string;
+  /** Best-effort populated by the server; can be empty when the
+   *  Supabase admin lookup didn't return a user row. */
+  email?: string;
+  displayName?: string;
   created_at: string;
   notes: string;
   isSelf: boolean;
@@ -69,11 +73,30 @@ export default function SuperAdminsManager({
             </span>
             <div className="flex-1 min-w-0">
               <p
-                className="text-sm admin-mono truncate"
+                className="text-sm truncate"
                 style={{ color: "var(--card-foreground)", fontWeight: 600 }}
                 title={a.user_id}
               >
-                {a.user_id}
+                {a.displayName ? (
+                  <>
+                    {a.displayName}
+                    {a.email && (
+                      <span
+                        className="ml-2 text-xs"
+                        style={{
+                          color: "var(--muted-foreground)",
+                          fontWeight: 400,
+                        }}
+                      >
+                        {a.email}
+                      </span>
+                    )}
+                  </>
+                ) : a.email ? (
+                  a.email
+                ) : (
+                  <span className="admin-mono">{a.user_id}</span>
+                )}
                 {a.isSelf && (
                   <span
                     className="ml-2 text-[10px] uppercase tracking-[0.18em]"
@@ -88,6 +111,15 @@ export default function SuperAdminsManager({
                 style={{ color: "var(--muted-foreground)" }}
               >
                 {a.notes || "No notes"} · added {new Date(a.created_at).toLocaleDateString()}
+                {(a.email || a.displayName) && (
+                  <span
+                    className="ml-2 admin-mono"
+                    style={{ opacity: 0.6 }}
+                    title="User ID"
+                  >
+                    {a.user_id.slice(0, 8)}…
+                  </span>
+                )}
               </p>
             </div>
             {!a.isSelf && (

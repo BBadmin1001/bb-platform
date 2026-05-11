@@ -137,6 +137,7 @@ export async function createOpenHouse(input: OpenHouseInput): Promise<Result> {
 
   const { error } = await supabase.from("open_houses").insert({
     ...input,
+    tenant_id: tenantId,
     slug,
     address: composedAddress,
     form_id: formRow.id,

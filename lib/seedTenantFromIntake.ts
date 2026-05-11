@@ -113,6 +113,48 @@ export async function seedTenantFromIntake(
     heading: `${intake.realtor_full_name || ""} · Realtor`,
   }, warnings);
 
+  // ── 5b. Brand contact block (A3-006) ────────────────────────────
+  // The intake collects phone/email/social/licenses/brokerage office,
+  // and there's a Contact & License admin editor wired to
+  // `content_blocks(page='brand', key='contact')` (A1-003). Seed it
+  // here so customers land in admin with their submitted details
+  // pre-filled instead of staring at blank inputs, AND so the public
+  // footer/header chrome has correct phone/email/social on first
+  // render rather than falling back to platform defaults.
+  const licenses = (intake.licensed_states ?? [])
+    .filter((ls) => ls.state_abbr)
+    .map((ls) => ({
+      state: ls.state_abbr,
+      number: ls.license_number || "",
+    }));
+  const office = intake.broker_office_address
+    ? parseBrokerAddress(intake.broker_office_address, intake.brokerage_name)
+    : null;
+  await upsertBlock(
+    supabase,
+    tenantId,
+    "brand",
+    "contact",
+    {
+      phone: intake.phone || "",
+      email: intake.email || "",
+      social: {
+        instagram: intake.social?.instagram || "",
+        facebook: intake.social?.facebook || "",
+        tiktok: intake.social?.tiktok || "",
+        linkedin: intake.social?.linkedin || "",
+      },
+      licenses,
+      office: office ?? {
+        name: intake.brokerage_name || "",
+        street: "",
+        cityStateZip: "",
+        phone: "",
+      },
+    },
+    warnings,
+  );
+
   // ── 6. Photo media rows ────────────────────────────────────────
   // Save each uploaded Cloudinary URL as a media row so the polish
   // team can pick them via the admin image picker. We don't pre-link
@@ -238,10 +280,16 @@ function buildCredentials(intake: IntakeData): { label: string; value: string }[
   }
   for (const ls of intake.licensed_states ?? []) {
     if (!ls.state_abbr) continue;
-    items.push({
-      label: `${ls.state_abbr} License`,
-      value: ls.license_number || "On file",
-    });
+    // A3-018: when license number is blank, emit a single "Licensed in
+    // <state>" row instead of "<state> License: " with a dangling
+    // empty suffix. Keeps the credentials block visually clean
+    // regardless of whether the realtor filled the optional field.
+    const lic = (ls.license_number || "").trim();
+    if (lic) {
+      items.push({ label: `${ls.state_abbr} License`, value: lic });
+    } else {
+      items.push({ label: "Licensed", value: ls.state_abbr });
+    }
   }
   if (intake.mls_id) {
     items.push({ label: "MLS ID", value: intake.mls_id });
@@ -256,6 +304,39 @@ function buildCredentials(intake: IntakeData): { label: string; value: string }[
     });
   }
   return items;
+}
+
+/**
+ * Heuristic split of a free-text broker office address into
+ * `{name, street, cityStateZip, phone}`. The intake field is a single
+ * textarea so we can't trust line breaks; we do a best-effort by
+ * peeling off the last comma-segment that looks like `City, ST ZIP`
+ * and keeping the rest as street. Brokerage name comes from the
+ * sibling intake field.
+ */
+function parseBrokerAddress(
+  raw: string,
+  brokerageName?: string,
+): { name: string; street: string; cityStateZip: string; phone: string } {
+  const trimmed = raw.trim();
+  // Match a trailing "City, ST 12345(-1234)" segment.
+  const m = trimmed.match(/,\s*([^,]+,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?)\s*$/);
+  if (m) {
+    const cityStateZip = m[1].trim();
+    const street = trimmed.slice(0, m.index!).trim().replace(/,$/, "").trim();
+    return {
+      name: brokerageName || "",
+      street,
+      cityStateZip,
+      phone: "",
+    };
+  }
+  return {
+    name: brokerageName || "",
+    street: trimmed,
+    cityStateZip: "",
+    phone: "",
+  };
 }
 
 function formatList(arr: string[]): string {

@@ -252,7 +252,11 @@ export default function DomainStatusPanel(props: Props) {
           />
           <Field
             label="Currently resolves to"
-            value={props.domainCheckValue ?? "—"}
+            value={
+              props.domainCheckValue && props.domainCheckValue.trim()
+                ? props.domainCheckValue
+                : "— not resolving"
+            }
             mono
           />
           {props.domainVerifiedAt && (

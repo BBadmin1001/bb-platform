@@ -95,6 +95,10 @@ export default function IntakeWizard() {
   const [data, setData] = useState<IntakeData>(emptyIntake);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /** A3-015 / R-A3-213: surface a "we restored your draft" pill when
+   *  the mount-time restore actually found a saved blob. Dismissed by
+   *  the user clicking it or moving past the first step. */
+  const [draftRestored, setDraftRestored] = useState(false);
 
   // Restore draft on mount.
   useEffect(() => {
@@ -104,6 +108,19 @@ export default function IntakeWizard() {
     try {
       const parsed = JSON.parse(saved);
       setData((prev) => ({ ...prev, ...parsed }));
+      // Only show the pill when the saved blob has meaningful content
+      // (avoid surfacing a banner on an empty draft).
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        Object.values(parsed).some(
+          (v) =>
+            (typeof v === "string" && v.trim().length > 0) ||
+            (Array.isArray(v) && v.length > 0),
+        )
+      ) {
+        setDraftRestored(true);
+      }
     } catch {
       // ignore corrupted draft
     }
@@ -183,6 +200,52 @@ export default function IntakeWizard() {
 
   return (
     <div className="max-w-2xl mx-auto">
+      {/* ── Agreed price + draft-restored hints (A3-010 / A3-015) ── */}
+      {(agreedSetupCents !== null || draftRestored) && (
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-6">
+          {agreedSetupCents !== null ? (
+            <p
+              className="text-[11px] uppercase tracking-[0.22em] inline-flex items-center gap-2 px-3 py-2 rounded-full"
+              style={{
+                background: "rgba(20,40,64,0.06)",
+                color: "rgba(20,40,64,0.78)",
+                fontWeight: 600,
+              }}
+            >
+              Agreed setup fee · ${(agreedSetupCents / 100).toFixed(0)}
+              <span
+                style={{
+                  opacity: 0.6,
+                  textTransform: "none",
+                  letterSpacing: "0.02em",
+                  fontWeight: 400,
+                }}
+              >
+                · pay on the final step
+              </span>
+            </p>
+          ) : (
+            <span />
+          )}
+          {draftRestored && (
+            <button
+              type="button"
+              onClick={() => setDraftRestored(false)}
+              className="text-[11px] uppercase tracking-[0.22em] inline-flex items-center gap-2 px-3 py-2 rounded-full"
+              style={{
+                background: "rgba(20,40,64,0.06)",
+                color: "rgba(20,40,64,0.78)",
+                fontWeight: 600,
+                border: "1px solid rgba(20,40,64,0.12)",
+              }}
+              title="Dismiss"
+            >
+              Welcome back · we kept your draft
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Progress ───────────────────────────────────────────── */}
       <ol className="flex items-center justify-between gap-2 mb-10 flex-wrap">
         {INTAKE_STEPS.map((s, i) => {

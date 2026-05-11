@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentTenantId } from "@/lib/tenant/context";
 import AdminShell from "@/components/admin/AdminShell";
 import MediaUploader from "@/components/admin/media/MediaUploader";
 import YouTubeAdder from "@/components/admin/media/YouTubeAdder";
@@ -18,13 +19,17 @@ export default async function MediaPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
+  // Explicit tenant scoping (A3-004).
+  const tenantId = await getCurrentTenantId();
+  let mediaQ = supabase
+    .from("media")
+    .select(
+      "id,kind,cloudinary_public_id,url,alt,width,height,uploaded_at",
+    )
+    .order("uploaded_at", { ascending: false });
+  if (tenantId) mediaQ = mediaQ.eq("tenant_id", tenantId);
   const [{ data: media }, usage] = await Promise.all([
-    supabase
-      .from("media")
-      .select(
-        "id,kind,cloudinary_public_id,url,alt,width,height,uploaded_at",
-      )
-      .order("uploaded_at", { ascending: false }),
+    mediaQ,
     getCloudinaryUsage(),
   ]);
 

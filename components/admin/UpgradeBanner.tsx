@@ -60,7 +60,9 @@ export async function UpgradeBanner({
           className="text-lg mb-2"
           style={{ color: "var(--card-foreground)", fontWeight: 600 }}
         >
-          {meta.label} isn&apos;t active on your plan.
+          {meta.label}
+          {" "}
+          isn&apos;t active on your plan.
         </h2>
         <p
           className="text-sm mb-4"

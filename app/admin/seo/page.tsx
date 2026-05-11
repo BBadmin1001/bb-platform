@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentTenantId } from "@/lib/tenant/context";
 import AdminShell from "@/components/admin/AdminShell";
 import { tenantHasFeature } from "@/lib/features";
 import { UpgradeBanner } from "@/components/admin/UpgradeBanner";
@@ -58,15 +59,20 @@ export default async function SeoHubPage() {
   }
 
   // Quick-stats pulled from the DB so the cards can show live numbers.
+  // Explicit tenant scoping (A3-004) — super-admin reads bypass RLS
+  // and would surface other tenants' rows otherwise.
+  const tenantId = await getCurrentTenantId();
+  const countyQ = supabase
+    .from("county_landing_pages")
+    .select("id, is_published");
+  const altQ = supabase
+    .from("media")
+    .select("id")
+    .eq("kind", "image")
+    .or("alt.is.null,alt.eq.");
   const [{ data: countyRows }, { data: missingAlt }] = await Promise.all([
-    supabase
-      .from("county_landing_pages")
-      .select("id, is_published"),
-    supabase
-      .from("media")
-      .select("id")
-      .eq("kind", "image")
-      .or("alt.is.null,alt.eq."),
+    tenantId ? countyQ.eq("tenant_id", tenantId) : countyQ,
+    tenantId ? altQ.eq("tenant_id", tenantId) : altQ,
   ]);
 
   const countyTotal = (countyRows ?? []).length;

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, FileText, Mail, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentTenantId } from "@/lib/tenant/context";
 import AdminShell from "@/components/admin/AdminShell";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +21,15 @@ export default async function CustomPagesAdminPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
-  const { data: pages } = await supabase
+  // Explicit tenant scoping (A3-004).
+  const tenantId = await getCurrentTenantId();
+  let pagesQ = supabase
     .from("custom_pages")
     .select("id, slug, title, is_published, show_in_nav, display_order, updated_at")
     .order("display_order", { ascending: true })
     .order("created_at", { ascending: true });
+  if (tenantId) pagesQ = pagesQ.eq("tenant_id", tenantId);
+  const { data: pages } = await pagesQ;
 
   return (
     <AdminShell user={{ email: user.email ?? "" }}>

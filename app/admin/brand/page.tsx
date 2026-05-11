@@ -129,12 +129,16 @@ export default async function BrandDashboardPage() {
   if (!user) redirect("/admin/login");
 
   // Which brand sections have been customised? Used for the "Edited" badge
-  // and the live theme swatch on the Site Colors card.
+  // and the live theme swatch on the Site Colors card. Tenant-scoped (A3-004).
+  const { getCurrentTenantId } = await import("@/lib/tenant/context");
+  const tenantId = await getCurrentTenantId();
+  let rowsQ = supabase
+    .from("content_blocks")
+    .select("key, updated_at")
+    .eq("page", "brand");
+  if (tenantId) rowsQ = rowsQ.eq("tenant_id", tenantId);
   const [{ data: rows }, theme] = await Promise.all([
-    supabase
-      .from("content_blocks")
-      .select("key, updated_at")
-      .eq("page", "brand"),
+    rowsQ,
     getBrandTheme(),
   ]);
   const edited = new Map(

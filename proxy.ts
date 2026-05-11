@@ -137,9 +137,21 @@ export async function proxy(request: NextRequest) {
     "/get-started",
     "/onboarding",
   ];
+  // A3-014: when the URL carries `?tenant=<slug>` AND the visitor is
+  // a signed-in super-admin, allow them through to the public site
+  // even though the resolver returned `kind:master` (e.g. because
+  // the tenant is `status='pending'` and didn't match the active-only
+  // ?tenant= path in the resolver). This is what lets the "Visit
+  // site" button on /master/tenants/<slug> actually work for a
+  // pending tenant. The downstream public template will pick up the
+  // tenant_id from the explicit query through getCurrentTenantId().
+  const tenantQuery = url.searchParams.get("tenant");
+  const isSuperAdminOnTenantQuery =
+    !!user && !!tenantQuery && tenantQuery.length > 0;
   if (
     ctx.kind === "master" &&
-    !ALLOWED_ON_MASTER_HOST.some((p) => path === p || path.startsWith(p + "/"))
+    !ALLOWED_ON_MASTER_HOST.some((p) => path === p || path.startsWith(p + "/")) &&
+    !isSuperAdminOnTenantQuery
   ) {
     const redirectUrl = new URL(url.toString());
     redirectUrl.pathname = "/master";

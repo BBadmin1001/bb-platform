@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getCurrentTenantId } from "@/lib/tenant/context";
 import AdminShell from "@/components/admin/AdminShell";
 import PartnersManager, {
   type CategoryRow,
@@ -18,29 +19,39 @@ export default async function PartnersAdminPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
-  // First-visit auto-seed: if there are zero partner_categories rows,
-  // populate the 5 defaults from `lib/content.ts` so admins always see
-  // editable rows instead of an empty-state button. Safe to re-run via
-  // ON CONFLICT-style insert (we only insert categories the admin doesn't
-  // already have by title).
-  await ensureDefaultsSeeded();
+  const tenantId = await getCurrentTenantId();
+
+  // First-visit auto-seed: if THIS TENANT has zero partner_categories
+  // rows, seed the 5 defaults so admins see editable rows. Previously
+  // this was global (super-admin saw other tenants' seeds and skipped
+  // seeding the current tenant — A3-004 cross-tenant leak).
+  if (tenantId) {
+    await ensureDefaultsSeeded(tenantId);
+  }
+
+  // Explicit tenant scoping (A3-004): every list query is filtered by
+  // current tenant id. Without this, super-admin reads would bypass
+  // RLS and see other tenants' rows.
+  const catsQ = supabase
+    .from("partner_categories")
+    .select("id, title, description, display_order, is_visible")
+    .order("display_order", { ascending: true });
+  const partnersQ = supabase
+    .from("partners")
+    .select(
+      "id, category_id, name, role, company, phone, email, display_order, is_visible, photo_id, photo_crop, logo_id, logo_crop",
+    )
+    .order("display_order", { ascending: true });
+  const mediaQ = supabase
+    .from("media")
+    .select("id, cloudinary_public_id, url, alt")
+    .eq("kind", "image")
+    .order("uploaded_at", { ascending: false });
 
   const [{ data: cats }, { data: partners }, { data: media }] = await Promise.all([
-    supabase
-      .from("partner_categories")
-      .select("id, title, description, display_order, is_visible")
-      .order("display_order", { ascending: true }),
-    supabase
-      .from("partners")
-      .select(
-        "id, category_id, name, role, company, phone, email, display_order, is_visible, photo_id, photo_crop, logo_id, logo_crop",
-      )
-      .order("display_order", { ascending: true }),
-    supabase
-      .from("media")
-      .select("id, cloudinary_public_id, url, alt")
-      .eq("kind", "image")
-      .order("uploaded_at", { ascending: false }),
+    tenantId ? catsQ.eq("tenant_id", tenantId) : catsQ,
+    tenantId ? partnersQ.eq("tenant_id", tenantId) : partnersQ,
+    tenantId ? mediaQ.eq("tenant_id", tenantId) : mediaQ,
   ]);
 
   return (
@@ -81,15 +92,18 @@ export default async function PartnersAdminPage() {
 }
 
 /**
- * If no partner_categories rows exist yet, copy the defaults from
- * `lib/content.ts` into the database so the admin always sees editable
- * rows. Idempotent — only inserts categories whose titles are missing.
+ * If THIS TENANT has no partner_categories rows, copy the defaults
+ * from `lib/content.ts` into the database so the admin always sees
+ * editable rows. Idempotent — bails when the tenant already has
+ * categories. Tenant-scoped (A3-004) — never inserts cross-tenant
+ * data.
  */
-async function ensureDefaultsSeeded() {
+async function ensureDefaultsSeeded(tenantId: string) {
   const supabase = createServiceClient();
   const { count } = await supabase
     .from("partner_categories")
-    .select("id", { count: "exact", head: true });
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId);
   if ((count ?? 0) > 0) return;
 
   const { content } = await import("@/lib/content");
@@ -98,6 +112,7 @@ async function ensureDefaultsSeeded() {
     const { data: inserted } = await supabase
       .from("partner_categories")
       .insert({
+        tenant_id: tenantId,
         title: cat.title,
         description: cat.body,
         display_order: i,
@@ -119,6 +134,7 @@ async function ensureDefaultsSeeded() {
     };
     const seedContacts = cat.contacts as unknown as PartnerSeed[];
     const partners = seedContacts.map((c, idx) => ({
+      tenant_id: tenantId,
       category_id: inserted.id,
       name: c.name,
       role: c.role,

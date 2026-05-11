@@ -25,11 +25,18 @@ export default async function ContentPagePage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
+  // A3-004: explicit tenant scoping so super-admin reads don't bleed
+  // other tenants' "edited" timestamps onto this page.
+  const { getCurrentTenantId } = await import("@/lib/tenant/context");
+  const tenantId = await getCurrentTenantId();
+
   // Fetch which rows have been edited (so we can show an "edited" tag)
-  const { data: rows } = await supabase
+  let rowsQ = supabase
     .from("content_blocks")
     .select("key,updated_at")
     .eq("page", page);
+  if (tenantId) rowsQ = rowsQ.eq("tenant_id", tenantId);
+  const { data: rows } = await rowsQ;
   const edited = new Map(
     (rows ?? []).map((r) => [r.key as string, r.updated_at as string]),
   );

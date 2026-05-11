@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Plus, ExternalLink, Pencil, Calendar } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentTenantId } from "@/lib/tenant/context";
 import AdminShell from "@/components/admin/AdminShell";
 import { tenantHasFeature } from "@/lib/features";
 import { UpgradeBanner } from "@/components/admin/UpgradeBanner";
@@ -34,10 +35,14 @@ export default async function OpenHousesAdminPage() {
     );
   }
 
-  const { data: rows } = await supabase
+  // Explicit tenant scoping (A3-004).
+  const tenantId = await getCurrentTenantId();
+  let rowsQ = supabase
     .from("open_houses")
     .select("id, slug, heading, address, open_date, open_time_label, is_published, updated_at")
     .order("open_date", { ascending: false, nullsFirst: false });
+  if (tenantId) rowsQ = rowsQ.eq("tenant_id", tenantId);
+  const { data: rows } = await rowsQ;
 
   return (
     <AdminShell user={{ email: user.email ?? "" }}>

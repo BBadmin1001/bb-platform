@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import {
   setTenantLifecycleStage,
+  forceTenantLive,
   rotatePreviewToken,
   type LifecycleStage,
 } from "@/app/master/tenants/actions";
@@ -101,6 +102,24 @@ export default function LifecyclePanel({
         return;
       }
       setStage(nextStage);
+    });
+  }
+
+  function forceLive() {
+    if (
+      !confirm(
+        "Force this tenant live without a verified domain? The customer's public URL won't resolve until DNS is fixed. Use only when you know DNS will be set up out-of-band.",
+      )
+    )
+      return;
+    setError(null);
+    startTransition(async () => {
+      const res = await forceTenantLive(slug);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setStage("live");
     });
   }
 
@@ -242,16 +261,30 @@ export default function LifecyclePanel({
           {stageMeta.blurb}
         </p>
         {nextStage && (
-          <button
-            type="button"
-            onClick={advance}
-            disabled={pending}
-            className="admin-btn inline-flex items-center"
-            style={pending ? { opacity: 0.6 } : undefined}
-          >
-            Advance to {STAGES.find((s) => s.id === nextStage)?.label}
-            <ChevronRight size={14} className="ml-1.5" />
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={advance}
+              disabled={pending}
+              className="admin-btn inline-flex items-center"
+              style={pending ? { opacity: 0.6 } : undefined}
+            >
+              Advance to {STAGES.find((s) => s.id === nextStage)?.label}
+              <ChevronRight size={14} className="ml-1.5" />
+            </button>
+            {nextStage === "live" && (
+              <button
+                type="button"
+                onClick={forceLive}
+                disabled={pending}
+                className="admin-btn admin-btn-secondary inline-flex items-center"
+                style={pending ? { opacity: 0.6 } : undefined}
+                title="Skip the DNS-verified guardrail and flip live anyway. Use only when you've confirmed DNS will resolve before customers visit."
+              >
+                Force live (skip DNS)
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -331,12 +364,29 @@ export default function LifecyclePanel({
       </div>
 
       {error && (
-        <p
-          className="text-xs mt-3"
-          style={{ color: "var(--destructive)" }}
+        <div
+          className="mt-4 p-3 rounded-md"
+          style={{
+            background:
+              "color-mix(in srgb, var(--destructive) 10%, transparent)",
+            border:
+              "1px solid color-mix(in srgb, var(--destructive) 30%, transparent)",
+          }}
+          role="alert"
         >
-          {error}
-        </p>
+          <p
+            className="text-[11px] uppercase tracking-[0.22em] mb-1"
+            style={{ color: "var(--destructive)", fontWeight: 700 }}
+          >
+            Couldn&apos;t advance
+          </p>
+          <p
+            className="text-xs"
+            style={{ color: "var(--destructive)" }}
+          >
+            {error}
+          </p>
+        </div>
       )}
     </section>
   );

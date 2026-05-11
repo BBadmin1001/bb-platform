@@ -35,11 +35,25 @@ export async function upsertForm(
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  const payload = {
-    ...input,
-    fields: input.fields,
-    updated_at: new Date().toISOString(),
-  };
+  // A3-004: forms is a tenant-scoped table — explicitly pass
+  // tenant_id on insert so super-admin writes don't NULL-violate.
+  const tenantId = await getCurrentTenantId();
+  if (!tenantId && !existingId) {
+    return { ok: false, error: "Tenant context missing." };
+  }
+
+  const payload = existingId
+    ? {
+        ...input,
+        fields: input.fields,
+        updated_at: new Date().toISOString(),
+      }
+    : {
+        ...input,
+        tenant_id: tenantId,
+        fields: input.fields,
+        updated_at: new Date().toISOString(),
+      };
 
   const query = existingId
     ? supabase.from("forms").update(payload).eq("id", existingId)

@@ -185,17 +185,43 @@ export async function createPaymentLinkForQuote(input: {
 /**
  * Verify a Stripe webhook payload signature. Used by /api/stripe/webhook
  * to confirm events actually originated from Stripe (not someone
- * guessing the URL). Without STRIPE_WEBHOOK_SECRET set, returns the
- * payload unverified — safe in dev, **NEVER in prod**.
+ * guessing the URL).
+ *
+ * **Production hard-fail rules:**
+ *   - If `NODE_ENV === "production"` and `STRIPE_WEBHOOK_SECRET` is
+ *     missing → throw. The webhook will never accept anything; prevents
+ *     unsigned-payload exploits like A3-001.
+ *   - If `NODE_ENV === "production"` and the signature header is
+ *     missing → throw. Stripe always sends a signature on real
+ *     deliveries; a missing header in prod is a forged request.
+ *
+ * **Dev fallback** (NODE_ENV !== "production"):
+ *   - Accepts unsigned payloads with a console warning, so local
+ *     development without a Stripe CLI is still workable.
  */
 export function verifyWebhook(payload: string, signature: string | null): Stripe.Event {
   const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (isProd && !secret) {
+    throw new Error(
+      "STRIPE_WEBHOOK_SECRET is not configured in production. Refusing to accept unsigned webhook events.",
+    );
+  }
+  if (isProd && !signature) {
+    throw new Error(
+      "Missing stripe-signature header on production webhook request. Refusing to process unsigned event.",
+    );
+  }
+
   if (secret && signature) {
     return getStripe().webhooks.constructEvent(payload, signature, secret);
   }
-  // Dev fallback: parse without verification.
+
+  // Dev-only fallback: parse without verification. Unreachable in
+  // production thanks to the guards above.
   console.warn(
-    "[stripe webhook] STRIPE_WEBHOOK_SECRET missing — accepting event without signature verification. Set this in production.",
+    "[stripe webhook] STRIPE_WEBHOOK_SECRET missing or no signature — accepting event without verification (dev only).",
   );
   return JSON.parse(payload) as Stripe.Event;
 }

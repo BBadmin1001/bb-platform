@@ -43,15 +43,39 @@ export function getPlatformTarget(): string {
 async function resolveCnameChain(host: string): Promise<string | null> {
   const visited = new Set<string>();
   let current = host.toLowerCase();
+  let iterations = 0;
   // Cap chain length so a malicious DNS loop can't hang us.
   for (let i = 0; i < 8; i++) {
     if (visited.has(current)) return current;
     visited.add(current);
     try {
       const records = await dns.resolveCname(current);
-      if (!records || records.length === 0) return current;
+      if (!records || records.length === 0) {
+        // No CNAME but the name might still have an A/AAAA record.
+        // Try a generic resolve as fallback before concluding nothing.
+        try {
+          const a = await dns.resolve4(current).catch(() => null);
+          if (a && a.length > 0) return a[0];
+          const aaaa = await dns.resolve6(current).catch(() => null);
+          if (aaaa && aaaa.length > 0) return aaaa[0];
+        } catch {
+          // ignore
+        }
+        // No records of any kind on the first hop → domain doesn't
+        // resolve. Returning null lets the caller render a "not
+        // resolving" label rather than echoing the queried hostname
+        // back (A3-013).
+        if (iterations === 0) return null;
+        return current;
+      }
       current = records[0].toLowerCase().replace(/\.$/, "");
+      iterations++;
     } catch {
+      // CNAME query errored (typical for `.test` domains or NXDOMAIN).
+      // If we haven't made any progress, treat the host as unresolved
+      // — same as the no-records branch above. Otherwise return the
+      // last good hop so the caller can show the partial chain.
+      if (iterations === 0) return null;
       return current;
     }
   }

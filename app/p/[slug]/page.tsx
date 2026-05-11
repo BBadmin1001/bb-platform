@@ -52,17 +52,38 @@ export default async function CustomPagePublicView({
   const tenantId = await getCurrentTenantId();
   if (!supabase || !tenantId) notFound();
 
-  const { data: page } = await supabase
-    .from("custom_pages")
-    .select("title, body_md, is_published")
-    .eq("tenant_id", tenantId)
-    .eq("slug", slug)
-    .eq("is_published", true)
-    .maybeSingle();
+  type PageRow = { title: string; body_md: string; is_published: boolean };
+  let pageRow: PageRow | null = null;
+  try {
+    const { data } = await supabase
+      .from("custom_pages")
+      .select("title, body_md, is_published")
+      .eq("tenant_id", tenantId)
+      .eq("slug", slug)
+      .eq("is_published", true)
+      .maybeSingle();
+    pageRow = (data as unknown as PageRow | null) ?? null;
+  } catch (err) {
+    console.error("[p/[slug]] custom_pages lookup failed", err);
+    notFound();
+  }
 
-  if (!page) notFound();
+  if (!pageRow) notFound();
+  const page: PageRow = pageRow;
 
-  const html = renderMarkdown(page.body_md as string);
+  let html = "";
+  try {
+    html = renderMarkdown(page.body_md);
+  } catch (err) {
+    console.error("[p/[slug]] markdown render failed", err);
+    // Fall back to escaping the markdown as plain pre-wrapped text so
+    // the page still renders something instead of 500'ing.
+    const escaped = String(page.body_md ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    html = `<pre style="white-space: pre-wrap;">${escaped}</pre>`;
+  }
 
   return (
     <main>

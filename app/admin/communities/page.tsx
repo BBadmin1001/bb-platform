@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Plus, Eye, EyeOff, Pencil, Image as ImageIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentTenantId } from "@/lib/tenant/context";
 import AdminShell from "@/components/admin/AdminShell";
 import { cldUrl } from "@/lib/cloudinary";
 import SeedDefaultsButton from "@/components/admin/communities/SeedDefaultsButton";
@@ -17,7 +18,13 @@ export default async function CommunitiesAdminPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
-  const { data: rows } = await supabase
+  // Explicit tenant scoping (A3-004): RLS is defense-in-depth, but
+  // super-admins bypass RLS and would see every tenant's rows. Filter
+  // by current tenant id so master-as-tenant always sees the correct
+  // dataset.
+  const tenantId = await getCurrentTenantId();
+
+  let rowsQuery = supabase
     .from("communities")
     .select(
       `id, slug, name, state, tagline, median_price, yoy_change, yoy_direction,
@@ -25,6 +32,10 @@ export default async function CommunitiesAdminPage() {
        media:image_id ( cloudinary_public_id, url )`,
     )
     .order("display_order", { ascending: true });
+  if (tenantId) {
+    rowsQuery = rowsQuery.eq("tenant_id", tenantId);
+  }
+  const { data: rows } = await rowsQuery;
 
   const items = rows ?? [];
 

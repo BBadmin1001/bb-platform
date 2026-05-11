@@ -178,7 +178,8 @@ export async function seedDefaultPartners(): Promise<Result> {
 
   const { data: existingCats } = await supabase
     .from("partner_categories")
-    .select("title");
+    .select("title")
+    .eq("tenant_id", tenantId);
   const existingTitles = new Set(
     (existingCats ?? []).map((c) => (c.title as string).toLowerCase()),
   );
@@ -215,6 +216,7 @@ export async function seedDefaultPartners(): Promise<Result> {
     };
     const seedContacts = cat.contacts as unknown as PartnerSeed[];
     const partners = seedContacts.map((c, idx) => ({
+      tenant_id: tenantId,
       category_id: data.id,
       name: c.name,
       role: c.role,

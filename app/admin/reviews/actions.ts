@@ -31,17 +31,24 @@ export async function createReview(input: ReviewInput): Promise<Result> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  const { data: existing } = await supabase
+  // A3-004: tenant_id is NOT NULL on `reviews`; without explicitly
+  // passing the active tenant id the insert fails for super-admin
+  // (who bypasses RLS and has no auto-inferred tenant context).
+  const tenantId = await getCurrentTenantId();
+  if (!tenantId) return { ok: false, error: "Tenant context missing." };
+
+  let existingQ = supabase
     .from("reviews")
     .select("display_order")
     .order("display_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  existingQ = existingQ.eq("tenant_id", tenantId);
+  const { data: existing } = await existingQ.maybeSingle();
   const nextOrder = (existing?.display_order ?? -1) + 1;
 
   const { error } = await supabase
     .from("reviews")
-    .insert({ ...input, display_order: nextOrder });
+    .insert({ ...input, tenant_id: tenantId, display_order: nextOrder });
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/reviews");
@@ -143,6 +150,9 @@ export async function approveSubmission(submissionId: string): Promise<Result> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
+  const tenantId = await getCurrentTenantId();
+  if (!tenantId) return { ok: false, error: "Tenant context missing." };
+
   const { data: sub, error: subErr } = await supabase
     .from("review_submissions")
     .select("id, author_name, rating, quote")
@@ -151,6 +161,7 @@ export async function approveSubmission(submissionId: string): Promise<Result> {
   if (subErr || !sub) return { ok: false, error: subErr?.message ?? "Not found." };
 
   const { error: insErr } = await supabase.from("reviews").insert({
+    tenant_id: tenantId,
     source: "manual",
     author_name: sub.author_name,
     author_short_label: sub.author_name,
