@@ -134,13 +134,18 @@ function rowToCommunity(row: DbRow, fallback?: Community): Community {
  * Falls back to static defaults when DB unavailable or empty.
  */
 export async function getCommunities(): Promise<Community[]> {
+  // staticCommunities is Samina's list (Woodbridge, Dumfries, etc.).
+  // We use it ONLY for per-row property fallbacks (image, life
+  // section) when the matching slug exists in the DB — never as the
+  // full set, which would leak Samina's communities into other
+  // tenants' grids.
   const fallbackBySlug = new Map(staticCommunities.map((c) => [c.slug, c]));
 
   try {
     const supabase = getServiceClient();
-    if (!supabase) return staticCommunities;
+    if (!supabase) return [];
     const tenantId = await getCurrentTenantId();
-    if (!tenantId) return staticCommunities;
+    if (!tenantId) return [];
 
     const { data, error } = await supabase
       .from("communities")
@@ -156,22 +161,26 @@ export async function getCommunities(): Promise<Community[]> {
       .eq("is_visible", true)
       .order("display_order", { ascending: true });
 
-    if (error || !data || data.length === 0) return staticCommunities;
+    if (error || !data || data.length === 0) return [];
 
     const rows = data as unknown as DbRow[];
     return rows.map((r) => rowToCommunity(r, fallbackBySlug.get(r.slug)));
   } catch {
-    return staticCommunities;
+    return [];
   }
 }
 
 export async function getCommunityBySlug(slug: string): Promise<Community | null> {
-  const fallback = staticCommunities.find((c) => c.slug === slug) ?? null;
+  // Per-slug DB read. We do NOT fall back to the static
+  // staticCommunities set — that's Samina-specific. If the tenant
+  // doesn't have this slug in their communities table, the page
+  // 404s (callers handle null).
+  const fallbackForCopy = staticCommunities.find((c) => c.slug === slug);
   try {
     const supabase = getServiceClient();
-    if (!supabase) return fallback;
+    if (!supabase) return null;
     const tenantId = await getCurrentTenantId();
-    if (!tenantId) return fallback;
+    if (!tenantId) return null;
 
     const { data, error } = await supabase
       .from("communities")
@@ -187,9 +196,12 @@ export async function getCommunityBySlug(slug: string): Promise<Community | null
       .eq("slug", slug)
       .maybeSingle();
 
-    if (error || !data) return fallback;
-    return rowToCommunity(data as unknown as DbRow, fallback ?? undefined);
+    if (error || !data) return null;
+    // fallbackForCopy is only used to fill specific empty columns
+    // (price_tiers, life) when the matching slug happens to exist
+    // in samina's static set — not to fake out a missing row.
+    return rowToCommunity(data as unknown as DbRow, fallbackForCopy);
   } catch {
-    return fallback;
+    return null;
   }
 }

@@ -31,8 +31,14 @@ export const reviews: Review[] = [
   },
 ];
 
-export const ratingsLine: Array<{ source: string; value: number; count: string }> = [
-  { source: "Zillow", value: 5.0, count: "25 reviews" },
-  { source: "Google", value: 5.0, count: "10 reviews" },
-  { source: "Realtor.com", value: 5.0, count: "7 reviews" },
-];
+// Aggregate ratings strip — used to be Samina's hardcoded Zillow /
+// Google / Realtor.com counts. For multi-tenant rendering we ship
+// an empty default so the strip simply doesn't appear until each
+// tenant's aggregate ratings are wired in (Phase plan — see Section D
+// of TESTING_REPORT.md for the proposal). The shape stays so callers
+// (ReviewsStrip, /reviews) compile without changes.
+export const ratingsLine: Array<{
+  source: string;
+  value: number;
+  count: string;
+}> = [];

@@ -14,6 +14,9 @@ export default async function ReviewsStrip() {
     getReviews({ onlyHomepage: false }),
     getSection<ReviewsIntro>("home", "reviews"),
   ]);
+  // No reviews for this tenant → render nothing instead of leaking
+  // another tenant's testimonials (bug A1-002).
+  if (reviews.length === 0) return null;
   const bgUrl = await resolveImageUrl(c.backgroundImage, {
     fallback:
       "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1920&auto=format&fit=crop&q=85",
@@ -69,26 +72,34 @@ export default async function ReviewsStrip() {
           ))}
         </div>
 
-        {/* Aggregate ratings */}
-        <Reveal>
-          <div className="mt-16 md:mt-28 max-w-3xl mx-auto flex flex-wrap items-end justify-center gap-x-10 sm:gap-x-16 gap-y-8 md:gap-y-10 text-center">
-            {ratingsLine.map((r) => (
-              <div key={r.source}>
-                <p
-                  className="text-3xl text-navy mb-3"
-                  style={{ fontWeight: 200 }}
-                >
-                  <Counter to={r.value} decimals={1} />
-                  <span className="ml-0.5 text-2xl">★</span>
-                </p>
-                <p className="text-[0.65rem] tracking-[0.32em] uppercase text-ink-muted mb-1.5">
-                  {r.source}
-                </p>
-                <p className="text-xs font-light text-ink-subtle">{r.count}</p>
-              </div>
-            ))}
-          </div>
-        </Reveal>
+        {/* Aggregate platform ratings — sourced from a static array
+            that captures Samina's Zillow/Google/Realtor.com counts.
+            For other tenants this section misleads, so we only show
+            it when there are reviews AND the static block is non-
+            empty. Per-tenant aggregate ratings come in a later phase
+            (compute from reviews table or pull from Google Places /
+            Zillow APIs). */}
+        {ratingsLine.length > 0 && (
+          <Reveal>
+            <div className="mt-16 md:mt-28 max-w-3xl mx-auto flex flex-wrap items-end justify-center gap-x-10 sm:gap-x-16 gap-y-8 md:gap-y-10 text-center">
+              {ratingsLine.map((r) => (
+                <div key={r.source}>
+                  <p
+                    className="text-3xl text-navy mb-3"
+                    style={{ fontWeight: 200 }}
+                  >
+                    <Counter to={r.value} decimals={1} />
+                    <span className="ml-0.5 text-2xl">★</span>
+                  </p>
+                  <p className="text-[0.65rem] tracking-[0.32em] uppercase text-ink-muted mb-1.5">
+                    {r.source}
+                  </p>
+                  <p className="text-xs font-light text-ink-subtle">{r.count}</p>
+                </div>
+              ))}
+            </div>
+          </Reveal>
+        )}
       </div>
     </section>
   );

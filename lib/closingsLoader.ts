@@ -56,9 +56,11 @@ type DbRow = {
 export async function getClosings(): Promise<Closing[]> {
   try {
     const supabase = client();
-    if (!supabase) return staticClosings;
+    // Never fall back to the static (Samina) closings set — leaks
+    // her transaction history into other tenants' sites.
+    if (!supabase) return [];
     const tenantId = await getCurrentTenantId();
-    if (!tenantId) return staticClosings;
+    if (!tenantId) return [];
 
     const { data, error } = await supabase
       .from("closings")
@@ -70,7 +72,7 @@ export async function getClosings(): Promise<Closing[]> {
       .eq("is_visible", true)
       .order("display_order", { ascending: true });
 
-    if (error || !data || data.length === 0) return staticClosings;
+    if (error || !data || data.length === 0) return [];
 
     return (data as unknown as DbRow[]).map((r) => ({
       id: r.id,
@@ -87,6 +89,6 @@ export async function getClosings(): Promise<Closing[]> {
       year: r.closed_year ?? new Date().getFullYear(),
     }));
   } catch {
-    return staticClosings;
+    return [];
   }
 }

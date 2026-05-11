@@ -52,9 +52,14 @@ function toReview(r: DbRow): Review {
 export async function getReviews(opts: { onlyHomepage?: boolean } = {}): Promise<Review[]> {
   try {
     const supabase = client();
-    if (!supabase) return staticReviews;
+    // No supabase or no tenant in context → render no reviews. We
+    // intentionally do NOT fall back to the static `staticReviews`
+    // set (which contains Samina's actual client testimonials) — that
+    // would leak one tenant's reviews into every other tenant's
+    // public site (bug A1-002).
+    if (!supabase) return [];
     const tenantId = await getCurrentTenantId();
-    if (!tenantId) return staticReviews;
+    if (!tenantId) return [];
 
     let query = supabase
       .from("reviews")
@@ -76,10 +81,10 @@ export async function getReviews(opts: { onlyHomepage?: boolean } = {}): Promise
     }
 
     const { data, error } = await query;
-    if (error || !data || data.length === 0) return staticReviews;
+    if (error || !data || data.length === 0) return [];
     return (data as DbRow[]).map(toReview);
   } catch {
-    return staticReviews;
+    return [];
   }
 }
 
