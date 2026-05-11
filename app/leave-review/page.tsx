@@ -1,18 +1,32 @@
 import Image from "next/image";
 import LeaveReviewForm from "@/components/LeaveReviewForm";
 import { getPortrait } from "@/lib/contentLoader";
+import { getCurrentTenant } from "@/lib/tenant/context";
 
-export const metadata = {
-  title: "Leave a Review | Samina Bilal",
-  description:
-    "Share your experience working with Samina Bilal — RE/MAX Galaxy Realtor, Northern Virginia & Maryland.",
-};
+export async function generateMetadata() {
+  const tenant = await getCurrentTenant();
+  const name = tenant?.realtor_name?.trim();
+  const brokerage = tenant?.brokerage?.trim();
+  return {
+    title: name ? `Leave a Review | ${name}` : "Leave a Review",
+    description: name
+      ? `Share your experience working with ${name}${brokerage ? ` — ${brokerage}` : ""}.`
+      : "Share your experience.",
+  };
+}
+
+export const dynamic = "force-dynamic";
 
 export default async function LeaveReviewPage() {
   // Pull the admin-managed portrait so changing it in Brand Identity
   // automatically updates this page too. Falls back to the static
   // headshot path when nothing has been uploaded yet.
-  const portrait = await getPortrait();
+  const [portrait, tenant] = await Promise.all([
+    getPortrait(),
+    getCurrentTenant(),
+  ]);
+  const realtorName = tenant?.realtor_name?.trim() || "your Realtor";
+  const firstName = realtorName.split(/\s+/)[0] || realtorName;
 
   return (
     <section className="min-h-screen bg-cream-soft pt-24 pb-24 px-6">
@@ -30,7 +44,7 @@ export default async function LeaveReviewPage() {
           >
             <Image
               src={portrait.avatar}
-              alt="Samina Bilal"
+              alt={realtorName}
               fill
               sizes="(min-width: 768px) 14rem, 11rem"
               className="object-cover"
@@ -49,15 +63,15 @@ export default async function LeaveReviewPage() {
           className="text-3xl md:text-4xl text-ink text-center mb-4"
           style={{ fontWeight: 600, letterSpacing: "0.005em", lineHeight: 1.2 }}
         >
-          Leave Samina a review.
+          Leave {firstName} a review.
         </h1>
         <p className="text-sm md:text-base text-ink/70 text-center max-w-xl mx-auto mb-12 leading-relaxed">
           Your words help future first-time buyers and sellers know what to
-          expect. Anything you share goes through Samina before it appears on
-          her site — feel free to be honest.
+          expect. Anything you share goes through {firstName} before it appears
+          on the site — feel free to be honest.
         </p>
 
-        <LeaveReviewForm />
+        <LeaveReviewForm realtorName={tenant?.realtor_name?.trim()} />
       </div>
     </section>
   );

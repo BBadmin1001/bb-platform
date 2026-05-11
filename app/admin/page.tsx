@@ -197,6 +197,23 @@ export default async function AdminDashboard({
   // banner) — we don't disable the click.
   const unlocked = await getCurrentTenantFeatures();
 
+  // Resolve the caller's role on the current tenant. Used to hide the
+  // owner-only Team card from editors so they don't click into the
+  // hard-error team page. Super admins always see everything.
+  const [{ data: superRow }, { data: membership }] = await Promise.all([
+    supabase
+      .from("super_admins")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("tenant_users")
+      .select("role, tenant_id")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
+  const isOwner = Boolean(superRow) || membership?.role === "owner";
+
   return (
     <AdminShell user={{ email: user.email ?? "" }}>
       <div className="max-w-6xl mx-auto px-5 md:px-8 py-10 md:py-14">
@@ -220,19 +237,24 @@ export default async function AdminDashboard({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {editorSections.map((s) => (
-            <AdminCard
-              key={s.href}
-              href={s.href}
-              icon={s.icon}
-              title={s.title}
-              description={s.description}
-              badge={s.badge}
-              accent={s.accent}
-              variant={s.variant}
-              locked={s.feature ? !unlocked.has(s.feature) : false}
-            />
-          ))}
+          {editorSections
+            // Hide the Team card from non-owners — /admin/team is gated
+            // by requireTenantOwner and hard-errors for editors. Super
+            // admins always see the card.
+            .filter((s) => s.href !== "/admin/team" || isOwner)
+            .map((s) => (
+              <AdminCard
+                key={s.href}
+                href={s.href}
+                icon={s.icon}
+                title={s.title}
+                description={s.description}
+                badge={s.badge}
+                accent={s.accent}
+                variant={s.variant}
+                locked={s.feature ? !unlocked.has(s.feature) : false}
+              />
+            ))}
         </div>
 
         <BillingShortcut unlockedCount={unlocked.size} />
@@ -254,10 +276,19 @@ export default async function AdminDashboard({
             <a href="/leave-review" target="_blank" className="text-navy underline underline-offset-2">/leave-review</a>.
           </p>
           <p className="text-xs tracking-[0.18em] uppercase text-ink/55 mt-5 mb-2">
-            Coming next
+            Tips
           </p>
           <p className="text-sm text-ink/75 leading-relaxed">
-            Team invites, then optional Google My Business review pulls.
+            Start with <strong>Brand Identity</strong> → set your phone,
+            email, social links and licenses under{" "}
+            <a
+              href="/admin/content/brand/contact"
+              className="text-navy underline underline-offset-2"
+            >
+              Contact &amp; License
+            </a>
+            . Then refresh your portrait, add a few closings, and you&apos;re
+            ready to share the site.
           </p>
         </div>
       </div>

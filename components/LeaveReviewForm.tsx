@@ -4,7 +4,15 @@ import { useState, useTransition } from "react";
 import { Star, Send, Check } from "lucide-react";
 import { submitPublicReview } from "@/app/admin/reviews/actions";
 
-export default function LeaveReviewForm() {
+export default function LeaveReviewForm({
+  realtorName,
+}: {
+  /** Tenant's realtor name — woven into the post-submit thank-you copy
+   *  + the consent disclaimer so non-Samina tenants don't read "Samina
+   *  reviews each submission". Falls back to a neutral phrasing. */
+  realtorName?: string;
+}) {
+  const firstName = realtorName?.trim().split(/\s+/)[0] || "Your Realtor";
   const [pending, startTransition] = useTransition();
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,8 +58,9 @@ export default function LeaveReviewForm() {
           Thank you.
         </h2>
         <p className="text-sm text-ink/70 max-w-md mx-auto leading-relaxed">
-          Your review has been sent. Samina reviews each submission personally
-          before it appears on her site — you&rsquo;ll see it within a few days.
+          Your review has been sent. {firstName} reviews each submission
+          personally before it appears on the site — you&rsquo;ll see it within
+          a few days.
         </p>
       </div>
     );
@@ -143,8 +152,9 @@ export default function LeaveReviewForm() {
           className="mt-1"
         />
         <span className="text-xs text-ink/65 leading-relaxed">
-          Samina may also share my review on her Google Business profile,
-          Zillow, or Realtor.com. I can withdraw consent at any time.
+          {firstName} may also share my review on their public profiles
+          (Google, Zillow, Realtor.com, etc). I can withdraw consent at any
+          time.
         </span>
       </label>
 

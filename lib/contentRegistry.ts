@@ -261,6 +261,99 @@ export const SECTIONS: SectionDef[] = [
   },
   {
     page: "brand",
+    key: "contact",
+    label: "Contact & License",
+    description:
+      "Phone, email, social URLs, state licenses, and brokerage office address. These flow into the header, footer, contact page, privacy page, and the open-house flyer.",
+    shape: {
+      phone: {
+        type: "text",
+        label: "Phone",
+        placeholder: "(703) 555-1234",
+        help: "Shown in the footer and contact page.",
+      },
+      email: {
+        type: "text",
+        label: "Email",
+        placeholder: "you@yourdomain.com",
+      },
+      social: {
+        type: "object",
+        label: "Social URLs",
+        help: "Leave any blank to hide that icon from the footer.",
+        shape: {
+          instagram: {
+            type: "url",
+            label: "Instagram URL",
+            placeholder: "https://instagram.com/handle",
+          },
+          facebook: {
+            type: "url",
+            label: "Facebook URL",
+            placeholder: "https://facebook.com/handle",
+          },
+          tiktok: {
+            type: "url",
+            label: "TikTok URL",
+            placeholder: "https://tiktok.com/@handle",
+          },
+          linkedin: {
+            type: "url",
+            label: "LinkedIn URL",
+            placeholder: "https://linkedin.com/in/handle",
+          },
+        },
+      },
+      licenses: {
+        type: "array",
+        label: "Real Estate Licenses",
+        help: "Add one row per state you're licensed in. Both fields required.",
+        itemShape: {
+          state: {
+            type: "text",
+            label: "State (2-letter)",
+            placeholder: "VA",
+          },
+          number: {
+            type: "text",
+            label: "License Number",
+            placeholder: "0225...",
+          },
+        },
+        itemTitleField: "state",
+        itemNoun: "License",
+      },
+      office: {
+        type: "object",
+        label: "Brokerage Office",
+        help: "Optional — physical office address shown on flyers + privacy page. Leave blank to omit.",
+        shape: {
+          name: {
+            type: "text",
+            label: "Office Name",
+            placeholder: "RE/MAX Galaxy",
+          },
+          street: {
+            type: "text",
+            label: "Street",
+            placeholder: "12781 Darby Brook Court, Suite 102",
+          },
+          cityStateZip: {
+            type: "text",
+            label: "City, State Zip",
+            placeholder: "Woodbridge, VA 22192",
+          },
+          phone: {
+            type: "text",
+            label: "Office Phone",
+            placeholder: "(703) 491-9570",
+          },
+        },
+      },
+    },
+  },
+  {
+    page: "brand",
     key: "portrait",
     label: "Realtor Image",
     description:

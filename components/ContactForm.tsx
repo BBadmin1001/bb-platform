@@ -4,7 +4,16 @@ import { useState, useTransition } from "react";
 import { Check } from "lucide-react";
 import { submitBuiltInForm } from "@/app/admin/forms/actions";
 
-export default function ContactForm() {
+export default function ContactForm({
+  realtorName,
+}: {
+  /** Realtor's display name. Used in the consent copy + the post-submit
+   *  thank-you so it reads correctly per-tenant (was previously
+   *  hardcoded to "Samina"). Falls back to a neutral phrasing when empty. */
+  realtorName?: string;
+}) {
+  const realtorLabel = realtorName?.trim() || "your Realtor";
+  const firstName = realtorName?.trim().split(/\s+/)[0] || "Your Realtor";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -41,8 +50,8 @@ export default function ContactForm() {
           <Check size={22} className="text-emerald-700" strokeWidth={1.5} />
         </div>
         <p className="text-base md:text-lg text-ink leading-[1.85] font-light">
-          Thanks — your message has been sent. Samina will be in touch within 24
-          hours.
+          Thanks — your message has been sent. {firstName} will be in touch
+          within 24 hours.
         </p>
       </div>
     );
@@ -73,7 +82,7 @@ export default function ContactForm() {
           className="mt-1 flex-shrink-0"
         />
         <span>
-          I agree to be contacted by Samina Bilal via call, email, and text.
+          I agree to be contacted by {realtorLabel} via call, email, and text.
           Reply STOP to opt out at any time. Message and data rates may apply.
         </span>
       </label>

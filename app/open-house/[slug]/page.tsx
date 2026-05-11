@@ -6,7 +6,7 @@ import {
   OPEN_HOUSE_FEATURE_BY_KEY,
   TOTAL_FLYER_PILLS,
 } from "@/lib/openHouseFeatures";
-import { site } from "@/lib/site";
+import { getTenantChrome } from "@/lib/tenant/chrome";
 import * as LucideIcons from "lucide-react";
 import PrintFlyerActions from "@/components/openhouse/PrintFlyerActions";
 import { qrDataUrl, siteOrigin } from "@/lib/qrcode";
@@ -114,12 +114,18 @@ export default async function OpenHousePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const [oh, portrait, brokerLogo] = await Promise.all([
+  const [oh, portrait, brokerLogo, chrome] = await Promise.all([
     getOpenHouseBySlug(slug),
     getPortrait(),
     getBrokerLogo(),
+    getTenantChrome(),
   ]);
   if (!oh) notFound();
+  // Primary license number shown under the realtor's name on the flyer
+  // (e.g. "Realtor · VA Lic # 0225..."). Picks the first configured
+  // license — usually the agent's home state — and omits the line
+  // entirely if no license is set.
+  const primaryLicense = chrome.licenses[0];
 
   const dateLabel = formatDate(oh.date);
   const pills = buildPills(oh);
@@ -170,7 +176,7 @@ export default async function OpenHousePage({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={brokerLogo}
-              alt={site.brokerageOffice.name}
+              alt={chrome.brokerageOffice?.name || chrome.brokerage || "Brokerage"}
               className="h-8 md:h-9 w-auto object-contain"
             />
             <span
@@ -338,7 +344,7 @@ export default async function OpenHousePage({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={portrait.avatar}
-                    alt={site.name}
+                    alt={chrome.name}
                     className="w-full h-full object-cover"
                   />
                 </div>
@@ -347,29 +353,36 @@ export default async function OpenHousePage({
                     className="text-[0.85rem] md:text-[0.92rem] leading-tight"
                     style={{ fontWeight: 600, letterSpacing: "0.01em" }}
                   >
-                    {site.name}
+                    {chrome.name}
                   </p>
                   <p
                     className="text-[0.55rem] md:text-[0.6rem] tracking-[0.22em] uppercase opacity-80 mt-0.5"
                     style={{ fontWeight: 500 }}
                   >
-                    Realtor · VA Lic # {site.licenses.va}
+                    {chrome.role || "Realtor"}
+                    {primaryLicense
+                      ? ` · ${primaryLicense.state} Lic # ${primaryLicense.number}`
+                      : ""}
                   </p>
                   <div className="mt-1.5 flex flex-col gap-0.5 text-[0.66rem] md:text-[0.72rem]">
-                    <a
-                      href={site.phoneHref}
-                      className="inline-flex items-center gap-1.5 opacity-95 hover:opacity-100"
-                    >
-                      <Phone size={10} strokeWidth={1.75} />
-                      {site.phone}
-                    </a>
-                    <a
-                      href={site.emailHref}
-                      className="inline-flex items-center gap-1.5 opacity-95 hover:opacity-100"
-                    >
-                      <Mail size={10} strokeWidth={1.75} />
-                      {site.email}
-                    </a>
+                    {chrome.phone && (
+                      <a
+                        href={chrome.phoneHref || undefined}
+                        className="inline-flex items-center gap-1.5 opacity-95 hover:opacity-100"
+                      >
+                        <Phone size={10} strokeWidth={1.75} />
+                        {chrome.phone}
+                      </a>
+                    )}
+                    {chrome.email && (
+                      <a
+                        href={chrome.emailHref || undefined}
+                        className="inline-flex items-center gap-1.5 opacity-95 hover:opacity-100"
+                      >
+                        <Mail size={10} strokeWidth={1.75} />
+                        {chrome.email}
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>
@@ -394,17 +407,19 @@ export default async function OpenHousePage({
                       Scan to RSVP
                     </p>
                   </>
-                ) : (
+                ) : chrome.brokerageOffice || chrome.brokerage ? (
                   <p
                     className="text-[0.55rem] tracking-[0.22em] uppercase opacity-70"
                     style={{ fontWeight: 500 }}
                   >
-                    {site.brokerageOffice.name}
+                    {chrome.brokerageOffice?.name || chrome.brokerage}
                   </p>
-                )}
+                ) : null}
               </div>
 
-              {/* RIGHT — brokerage card with MLS + compliance */}
+              {/* RIGHT — brokerage card with MLS + compliance. The
+                  brokerage block falls back to just the brokerage name
+                  when admin hasn't filled in the office address yet. */}
               <div className="col-span-4 flex flex-col items-end gap-1.5 text-right">
                 <p
                   className="text-[0.55rem] md:text-[0.6rem] tracking-[0.22em] uppercase opacity-80"
@@ -412,24 +427,36 @@ export default async function OpenHousePage({
                 >
                   Listing brokerage
                 </p>
-                <p
-                  className="text-[0.75rem] md:text-[0.82rem] leading-tight"
-                  style={{ fontWeight: 600, letterSpacing: "0.01em" }}
-                >
-                  {site.brokerageOffice.name}
-                </p>
-                <p className="text-[0.62rem] md:text-[0.68rem] opacity-90 leading-snug">
-                  {site.brokerageOffice.street}
-                  <br />
-                  {site.brokerageOffice.cityStateZip}
-                  <br />
-                  <a
-                    href={site.brokerageOffice.phoneHref}
-                    className="opacity-95 hover:opacity-100"
+                {(chrome.brokerageOffice?.name || chrome.brokerage) && (
+                  <p
+                    className="text-[0.75rem] md:text-[0.82rem] leading-tight"
+                    style={{ fontWeight: 600, letterSpacing: "0.01em" }}
                   >
-                    {site.brokerageOffice.phone}
-                  </a>
-                </p>
+                    {chrome.brokerageOffice?.name || chrome.brokerage}
+                  </p>
+                )}
+                {chrome.brokerageOffice && (
+                  <p className="text-[0.62rem] md:text-[0.68rem] opacity-90 leading-snug">
+                    {chrome.brokerageOffice.street}
+                    {chrome.brokerageOffice.cityStateZip && (
+                      <>
+                        <br />
+                        {chrome.brokerageOffice.cityStateZip}
+                      </>
+                    )}
+                    {chrome.brokerageOffice.phone && (
+                      <>
+                        <br />
+                        <a
+                          href={chrome.brokerageOffice.phoneHref || undefined}
+                          className="opacity-95 hover:opacity-100"
+                        >
+                          {chrome.brokerageOffice.phone}
+                        </a>
+                      </>
+                    )}
+                  </p>
+                )}
                 {oh.mlsId && (
                   <p
                     className="text-[0.6rem] md:text-[0.66rem] tracking-[0.18em] uppercase opacity-90 inline-flex items-center gap-1.5"

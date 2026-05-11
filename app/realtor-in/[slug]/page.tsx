@@ -8,8 +8,9 @@ import {
 } from "@/lib/countyLandingLoader";
 import { getBrand, getPortrait } from "@/lib/contentLoader";
 import { getReviews } from "@/lib/reviewsLoader";
-import { site } from "@/lib/site";
+import { getTenantChrome } from "@/lib/tenant/chrome";
 import { siteOrigin } from "@/lib/qrcode";
+import { getCurrentTenant } from "@/lib/tenant/context";
 // Reuse the homepage's "Three ways I help" cards (Buying / Selling /
 // Path to Ownership). Editing them in admin → home.services flows here too.
 import PillarCards from "@/components/PillarCards";
@@ -50,10 +51,14 @@ export async function generateMetadata({
   const page = await getCountyLanding(slug);
   if (!page) return { title: "Not found" };
 
-  const title = `Realtor in ${page.countyName} County, ${page.stateName} | Samina Bilal`;
+  const tenant = await getCurrentTenant();
+  const realtorName = tenant?.realtor_name?.trim() || "Your Realtor";
+  const brokerage = tenant?.brokerage?.trim();
+  const subline = brokerage ? `${realtorName} — ${brokerage}` : realtorName;
+  const title = `Realtor in ${page.countyName} County, ${page.stateName} | ${realtorName}`;
   const description =
     page.customMetaDescription ||
-    `Looking for a realtor in ${page.countyName} County, ${page.stateName}? Samina Bilal — RE/MAX Galaxy — guides buyers and sellers across ${page.serviceAreas.slice(0, 3).join(", ") || page.countyName} with five-star service and deep local market knowledge.`;
+    `Looking for a realtor in ${page.countyName} County, ${page.stateName}? ${subline} guides buyers and sellers across ${page.serviceAreas.slice(0, 3).join(", ") || page.countyName} with five-star service and deep local market knowledge.`;
   return {
     metadataBase: new URL(siteOrigin()),
     title,
@@ -81,11 +86,12 @@ export default async function CountyLandingPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const [page, brand, portrait, reviews] = await Promise.all([
+  const [page, brand, portrait, reviews, chrome] = await Promise.all([
     getCountyLanding(slug),
     getBrand(),
     getPortrait(),
     getReviews(),
+    getTenantChrome(),
   ]);
   if (!page) notFound();
 
@@ -112,8 +118,11 @@ export default async function CountyLandingPage({
         description: `Realtor serving ${page.countyName} County, ${page.stateName}.`,
         url: `${siteOrigin()}/realtor-in/${slug}`,
         image: portrait.full,
-        telephone: site.phone,
-        email: site.email,
+        // telephone / email omitted when blank rather than rendering a
+        // hardcoded fallback — Google would penalise inaccurate
+        // contact data more than missing fields.
+        ...(chrome.phone ? { telephone: chrome.phone } : {}),
+        ...(chrome.email ? { email: chrome.email } : {}),
         worksFor: { "@type": "RealEstateAgent", name: brand.brokerage },
         areaServed: {
           "@type": "AdministrativeArea",
@@ -292,14 +301,28 @@ export default async function CountyLandingPage({
             you&apos;re looking for. Most consults take 15 minutes.
           </p>
           <div className="flex flex-wrap justify-center gap-4 mb-8">
-            <a href={site.phoneHref} className="btn-glass">
-              <Phone size={14} className="mr-2" />
-              {site.phone}
-            </a>
-            <a href={site.emailHref} className="btn-outline-light">
-              <Mail size={14} className="mr-2" />
-              Email Samina
-            </a>
+            {chrome.phone && (
+              <a href={chrome.phoneHref || undefined} className="btn-glass">
+                <Phone size={14} className="mr-2" />
+                {chrome.phone}
+              </a>
+            )}
+            {chrome.email && (
+              <a
+                href={chrome.emailHref || undefined}
+                className="btn-outline-light"
+              >
+                <Mail size={14} className="mr-2" />
+                Email {chrome.name.split(/\s+/)[0] || chrome.name}
+              </a>
+            )}
+            {/* Always-available fallback CTA in case contact details
+                haven't been set yet — links to the contact form. */}
+            {!chrome.phone && !chrome.email && (
+              <Link href="/contact" className="btn-glass">
+                Get in Touch
+              </Link>
+            )}
           </div>
           <Link
             href="/communities"

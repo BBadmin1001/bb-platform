@@ -1,12 +1,18 @@
 import ClosingsGallery from "@/components/ClosingsGallery";
 import ShimmerText from "@/components/ShimmerText";
 import { getPageContent, resolveImageUrl } from "@/lib/contentLoader";
+import { getCurrentTenant } from "@/lib/tenant/context";
 
-export const metadata = {
-  title: "Recent Closings | Samina Bilal",
-  description:
-    "Every home Samina personally represented at the closing table. Northern Virginia and Maryland.",
-};
+export async function generateMetadata() {
+  const tenant = await getCurrentTenant();
+  const name = tenant?.realtor_name?.trim();
+  return {
+    title: name ? `Recent Closings | ${name}` : "Recent Closings",
+    description: name
+      ? `Every home ${name} personally represented at the closing table.`
+      : "Recent closings.",
+  };
+}
 
 export const dynamic = "force-dynamic";
 

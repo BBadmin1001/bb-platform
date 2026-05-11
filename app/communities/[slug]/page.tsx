@@ -4,6 +4,8 @@ import { GraduationCap, Trees, UtensilsCrossed, Train } from "lucide-react";
 import { getCommunities, getCommunityBySlug } from "@/lib/communitiesLoader";
 import ShimmerText from "@/components/ShimmerText";
 import DarkBreak from "@/components/DarkBreak";
+import { getCurrentTenant } from "@/lib/tenant/context";
+import { getTenantChrome } from "@/lib/tenant/chrome";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +15,14 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const c = await getCommunityBySlug(slug);
+  const [c, tenant] = await Promise.all([
+    getCommunityBySlug(slug),
+    getCurrentTenant(),
+  ]);
   if (!c) return {};
+  const name = tenant?.realtor_name?.trim();
   return {
-    title: `${c.name}, ${c.state} Real Estate | Samina Bilal`,
+    title: `${c.name}, ${c.state} Real Estate${name ? ` | ${name}` : ""}`,
     description: c.tagline,
   };
 }
@@ -27,10 +33,14 @@ export default async function CommunityPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const c = await getCommunityBySlug(slug);
+  const [c, chrome] = await Promise.all([
+    getCommunityBySlug(slug),
+    getTenantChrome(),
+  ]);
   if (!c) notFound();
   const all = await getCommunities();
   const others = all.filter((x) => x.slug !== slug).slice(0, 3);
+  const firstName = chrome.name.split(/\s+/)[0] || chrome.name;
 
   const yoyColor =
     c.yoyDirection === "up"
@@ -181,22 +191,27 @@ export default async function CommunityPage({
         height="sm"
       />
 
-      {/* Samina's take */}
-      <section className="section-y-lg gutter-x">
-        <div className="max-w-3xl mx-auto text-center">
-          <p className="eyebrow mb-12">Samina's Take</p>
-          <blockquote
-            className="text-2xl md:text-3xl lg:text-4xl leading-[1.45] text-ink italic"
-            style={{ fontWeight: 200, letterSpacing: "0.005em" }}
-          >
-            &ldquo;{c.saminaQuote}&rdquo;
-          </blockquote>
-          <div className="mx-auto my-12 w-10 h-px bg-navy/40" />
-          <p className="text-[0.7rem] tracking-[0.4em] uppercase text-ink-muted">
-            Samina Bilal · Realtor
-          </p>
-        </div>
-      </section>
+      {/* Realtor's take — sign-off uses the active tenant's name + role,
+          no longer hardcoded to Samina. The quote itself is per-tenant
+          per-community via communities.samina_quote (legacy column
+          name; treated as a generic "realtor's quote" column). */}
+      {c.saminaQuote && (
+        <section className="section-y-lg gutter-x">
+          <div className="max-w-3xl mx-auto text-center">
+            <p className="eyebrow mb-12">{firstName}&apos;s Take</p>
+            <blockquote
+              className="text-2xl md:text-3xl lg:text-4xl leading-[1.45] text-ink italic"
+              style={{ fontWeight: 200, letterSpacing: "0.005em" }}
+            >
+              &ldquo;{c.saminaQuote}&rdquo;
+            </blockquote>
+            <div className="mx-auto my-12 w-10 h-px bg-navy/40" />
+            <p className="text-[0.7rem] tracking-[0.4em] uppercase text-ink-muted">
+              {chrome.name} · {chrome.role || "Realtor"}
+            </p>
+          </div>
+        </section>
+      )}
 
       {/* CTA */}
       <section className="relative bg-navy text-white section-y gutter-x overflow-hidden">

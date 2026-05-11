@@ -4,7 +4,15 @@ import { useState, useTransition } from "react";
 import { Check } from "lucide-react";
 import { submitBuiltInForm } from "@/app/admin/forms/actions";
 
-export default function ValuationForm() {
+export default function ValuationForm({
+  realtorName,
+}: {
+  /** Tenant realtor's display name — woven into the post-submit copy.
+   *  Falls back to a neutral phrasing when empty so non-Samina tenants
+   *  don't see "Samina will review…". */
+  realtorName?: string;
+}) {
+  const firstName = realtorName?.trim().split(/\s+/)[0] || "We";
   const [v, setV] = useState({
     address: "",
     name: "",
@@ -43,7 +51,8 @@ export default function ValuationForm() {
           <Check size={22} className="text-emerald-700" strokeWidth={1.5} />
         </div>
         <p className="text-base md:text-lg text-ink leading-[1.85] font-light">
-          Got it — Samina will review your property and respond within 24 hours.
+          Got it — {firstName} will review your property and respond within 24
+          hours.
         </p>
       </div>
     );

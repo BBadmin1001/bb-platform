@@ -8,6 +8,7 @@ import {
   CircleUser,
   Share2,
   Type,
+  Phone,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AdminShell from "@/components/admin/AdminShell";
@@ -66,6 +67,16 @@ const CARDS: CardConfig[] = [
       "Name, role, brokerage, tagline, service area, and languages. Used site-wide.",
     blockKey: "identity",
     accent: "#5b7c4a",
+    variant: "lines",
+  },
+  {
+    href: "/admin/content/brand/contact",
+    icon: Phone,
+    title: "Contact & License",
+    description:
+      "Phone, email, socials, state licenses, brokerage office. Flows into header, footer, contact page, flyers, and privacy.",
+    blockKey: "contact",
+    accent: "#3a8b94",
     variant: "lines",
   },
   {

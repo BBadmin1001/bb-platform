@@ -9,6 +9,7 @@ import { getPortrait, getFeaturedImage, getServiceClient } from "@/lib/contentLo
 import { getAnalyticsMeasurementId } from "@/lib/integrationStore";
 import { siteOrigin } from "@/lib/qrcode";
 import { getCurrentTenant, getCurrentTenantId } from "@/lib/tenant/context";
+import { getTenantChrome } from "@/lib/tenant/chrome";
 import { headers } from "next/headers";
 
 const montserrat = Montserrat({
@@ -66,38 +67,49 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Fetch portrait + Analytics ID + the active tenant once so children
-  // don't refetch. All three are gated by tenant context — no tenant →
-  // defaults / null.
-  const [portrait, gaMeasurementId, h, tenant] = await Promise.all([
+  // Fetch portrait + Analytics ID + the tenant chrome (name, role,
+  // phone/email/social/licenses/office) once so children don't
+  // refetch. All are gated by tenant context — no tenant → safe
+  // neutral defaults (chrome.hasTenant = false).
+  const [portrait, gaMeasurementId, h, chrome] = await Promise.all([
     getPortrait(),
     getAnalyticsMeasurementId(),
     headers(),
-    getCurrentTenant(),
+    getTenantChrome(),
   ]);
-
-  // Realtor identity for the public header/footer/logo. Falls back to
-  // sensible neutrals when there's no tenant in context (master URL,
-  // unknown host) so the chrome doesn't render half-broken.
-  const realtorName = tenant?.realtor_name ?? "Realtor";
-  const brokerage = tenant?.brokerage ?? "";
 
   // Custom pages flagged show_in_nav surface in the public Header
   // and MenuDrawer alongside the built-in nav items.
   type NavCustomPage = { slug: string; title: string };
   let customNavPages: NavCustomPage[] = [];
-  if (tenant) {
+  // Communities children for the MenuDrawer submenu — per-tenant rows
+  // from the communities table, not the legacy hardcoded VA list.
+  let communityChildren: { slug: string; name: string }[] = [];
+  if (chrome.hasTenant) {
     const supabase = getServiceClient();
     const tenantId = await getCurrentTenantId();
     if (supabase && tenantId) {
-      const { data } = await supabase
-        .from("custom_pages")
-        .select("slug, title")
-        .eq("tenant_id", tenantId)
-        .eq("is_published", true)
-        .eq("show_in_nav", true)
-        .order("display_order", { ascending: true });
-      customNavPages = (data ?? []) as NavCustomPage[];
+      const [customRes, communityRes] = await Promise.all([
+        supabase
+          .from("custom_pages")
+          .select("slug, title")
+          .eq("tenant_id", tenantId)
+          .eq("is_published", true)
+          .eq("show_in_nav", true)
+          .order("display_order", { ascending: true }),
+        supabase
+          .from("communities")
+          .select("slug, name")
+          .eq("tenant_id", tenantId)
+          .eq("is_visible", true)
+          .order("display_order", { ascending: true })
+          .limit(8),
+      ]);
+      customNavPages = (customRes.data ?? []) as NavCustomPage[];
+      communityChildren = (communityRes.data ?? []) as {
+        slug: string;
+        name: string;
+      }[];
     }
   }
 
@@ -139,18 +151,24 @@ export default async function RootLayout({
         {!hideShell && (
           <Header
             portraitAvatar={portrait.avatar}
-            realtorName={realtorName}
-            brokerage={brokerage}
+            realtorName={chrome.name}
+            role={chrome.role}
+            brokerage={chrome.brokerage}
+            phone={chrome.phone}
+            phoneHref={chrome.phoneHref}
+            email={chrome.email}
+            emailHref={chrome.emailHref}
+            socialInstagram={chrome.social.instagram}
+            socialFacebook={chrome.social.facebook}
+            socialTiktok={chrome.social.tiktok}
+            socialLinkedin={chrome.social.linkedin}
             customNavPages={customNavPages}
+            communityChildren={communityChildren}
           />
         )}
         <main>{children}</main>
         {!hideShell && (
-          <Footer
-            portraitAvatar={portrait.avatar}
-            realtorName={realtorName}
-            brokerage={brokerage}
-          />
+          <Footer portraitAvatar={portrait.avatar} chrome={chrome} />
         )}
       </body>
     </html>

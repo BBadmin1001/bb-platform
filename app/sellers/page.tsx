@@ -16,11 +16,20 @@ import {
   Key,
 } from "lucide-react";
 
-export const metadata = {
-  title: "Selling a Home | Samina Bilal — VA & MD Listing Agent",
-  description:
-    "List with confidence. Local pricing intelligence, professional marketing, and negotiation that protects your bottom line — across Northern Virginia and Maryland.",
-};
+// Per-tenant metadata — pulls realtor_name from the active tenant
+// instead of hardcoding Samina's title. Description uses generic
+// service language so non-Samina tenants don't claim VA/MD-only.
+import { getCurrentTenant } from "@/lib/tenant/context";
+
+export async function generateMetadata() {
+  const tenant = await getCurrentTenant();
+  const name = tenant?.realtor_name?.trim();
+  return {
+    title: name ? `Selling a Home | ${name}` : "Selling a Home",
+    description:
+      "List with confidence. Local pricing intelligence, professional marketing, and negotiation that protects your bottom line.",
+  };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -84,11 +93,13 @@ const processIcons = [
 ];
 
 export default async function SellersPage() {
-  const [c, darkBreak, darkBreak2] = await Promise.all([
+  const [c, darkBreak, darkBreak2, tenant] = await Promise.all([
     getPageContent<SellersContent>("sellers"),
     getSection<DarkBreakContent>("sellers", "darkBreak"),
     getSection<DarkBreakContent>("sellers", "darkBreak2"),
+    getCurrentTenant(),
   ]);
+  const realtorName = tenant?.realtor_name?.trim();
 
   const ctaFallbackBg =
     "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1920&auto=format&fit=crop&q=85";
@@ -293,7 +304,7 @@ export default async function SellersPage() {
             <div className="mx-auto mt-10 w-12 h-px bg-navy/40" />
           </div>
 
-          <ValuationForm />
+          <ValuationForm realtorName={realtorName} />
         </div>
       </section>
 

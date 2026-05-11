@@ -31,7 +31,11 @@ const DB2_FALLBACK_BG =
 const DB2_DEFAULT_EYEBROW = "Why I Do This Work";
 const DB2_DEFAULT_QUOTE =
   "Real estate is the most important purchase most people make. It deserves a Realtor who treats it that way.";
-const DB2_DEFAULT_ATTRIBUTION = "Samina";
+// The original sign-off was hardcoded to "Samina". For multi-tenant
+// rendering we leave this blank — the admin can set their preferred
+// attribution via /admin/content/home/darkBreak2. A blank attribution
+// just renders no caption line under the quote.
+const DB2_DEFAULT_ATTRIBUTION = "";
 
 export default async function Home() {
   const [db1, db2] = await Promise.all([

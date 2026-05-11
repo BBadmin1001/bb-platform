@@ -1,14 +1,26 @@
-import { Phone, Mail, MapPin, Clock, Instagram, Facebook, Music2 } from "lucide-react";
-import { site } from "@/lib/site";
+import { Phone, Mail, MapPin, Clock, Instagram, Facebook, Music2, Linkedin } from "lucide-react";
 import ShimmerText from "@/components/ShimmerText";
 import ContactForm from "@/components/ContactForm";
 import { getPageContent, resolveImageUrl } from "@/lib/contentLoader";
+import { getTenantChrome } from "@/lib/tenant/chrome";
+import { getCurrentTenant } from "@/lib/tenant/context";
 
-export const metadata = {
-  title: "Contact | Samina Bilal",
-  description:
-    "Get in touch with Samina Bilal — Realtor at RE/MAX Galaxy. Licensed in Virginia and Maryland.",
-};
+export async function generateMetadata() {
+  const tenant = await getCurrentTenant();
+  if (!tenant) {
+    return {
+      title: "Contact",
+      description: "Get in touch.",
+    };
+  }
+  const subline = tenant.brokerage
+    ? `${tenant.realtor_name}, ${tenant.brokerage}`
+    : tenant.realtor_name;
+  return {
+    title: `Contact | ${tenant.realtor_name}`,
+    description: `Get in touch with ${subline}.`,
+  };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +36,10 @@ type ContactContent = {
 };
 
 export default async function ContactPage() {
-  const c = await getPageContent<ContactContent>("contact");
+  const [c, chrome] = await Promise.all([
+    getPageContent<ContactContent>("contact"),
+    getTenantChrome(),
+  ]);
   const heroBg = await resolveImageUrl(c.hero.backgroundImage, {
     fallback:
       "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1920&auto=format&fit=crop&q=85",
@@ -81,7 +96,7 @@ export default async function ContactPage() {
             </h2>
             <div className="mb-12 w-12 h-px bg-navy/40" />
 
-            <ContactForm />
+            <ContactForm realtorName={chrome.name} />
           </div>
 
           {/* Direct details */}
@@ -96,41 +111,108 @@ export default async function ContactPage() {
             <div className="mb-12 w-12 h-px bg-navy/40" />
 
             <div className="glass-light p-7 md:p-12 space-y-10">
-              <Detail icon={<Phone size={20} strokeWidth={1.5} />} label="Phone">
-                <a href={site.phoneHref} className="hover:text-navy transition-colors">
-                  {site.phone}
-                </a>
-              </Detail>
-              <Detail icon={<Mail size={20} strokeWidth={1.5} />} label="Email">
-                <a href={site.emailHref} className="hover:text-navy transition-colors">
-                  {site.email}
-                </a>
-              </Detail>
-              <Detail icon={<MapPin size={20} strokeWidth={1.5} />} label="Office">
-                {site.office.street}
-                <br />
-                {site.office.cityStateZip}
-              </Detail>
+              {chrome.phone && (
+                <Detail
+                  icon={<Phone size={20} strokeWidth={1.5} />}
+                  label="Phone"
+                >
+                  <a
+                    href={chrome.phoneHref || undefined}
+                    className="hover:text-navy transition-colors"
+                  >
+                    {chrome.phone}
+                  </a>
+                </Detail>
+              )}
+              {chrome.email && (
+                <Detail
+                  icon={<Mail size={20} strokeWidth={1.5} />}
+                  label="Email"
+                >
+                  <a
+                    href={chrome.emailHref || undefined}
+                    className="hover:text-navy transition-colors"
+                  >
+                    {chrome.email}
+                  </a>
+                </Detail>
+              )}
+              {chrome.brokerageOffice &&
+                (chrome.brokerageOffice.street ||
+                  chrome.brokerageOffice.cityStateZip) && (
+                  <Detail
+                    icon={<MapPin size={20} strokeWidth={1.5} />}
+                    label="Office"
+                  >
+                    {chrome.brokerageOffice.street}
+                    {chrome.brokerageOffice.cityStateZip && (
+                      <>
+                        <br />
+                        {chrome.brokerageOffice.cityStateZip}
+                      </>
+                    )}
+                  </Detail>
+                )}
               <Detail icon={<Clock size={20} strokeWidth={1.5} />} label="Hours">
                 By appointment, 7 days a week
               </Detail>
             </div>
 
             {/* Social */}
-            <div className="mt-12">
-              <p className="eyebrow mb-6">Follow</p>
-              <div className="flex items-center gap-7 text-navy">
-                <a href={site.social.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="hover:opacity-60 transition-opacity">
-                  <Instagram size={22} strokeWidth={1.5} />
-                </a>
-                <a href={site.social.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="hover:opacity-60 transition-opacity">
-                  <Facebook size={22} strokeWidth={1.5} />
-                </a>
-                <a href={site.social.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok" className="hover:opacity-60 transition-opacity">
-                  <Music2 size={22} strokeWidth={1.5} />
-                </a>
+            {(chrome.social.instagram ||
+              chrome.social.facebook ||
+              chrome.social.tiktok ||
+              chrome.social.linkedin) && (
+              <div className="mt-12">
+                <p className="eyebrow mb-6">Follow</p>
+                <div className="flex items-center gap-7 text-navy">
+                  {chrome.social.instagram && (
+                    <a
+                      href={chrome.social.instagram}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Instagram"
+                      className="hover:opacity-60 transition-opacity"
+                    >
+                      <Instagram size={22} strokeWidth={1.5} />
+                    </a>
+                  )}
+                  {chrome.social.facebook && (
+                    <a
+                      href={chrome.social.facebook}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Facebook"
+                      className="hover:opacity-60 transition-opacity"
+                    >
+                      <Facebook size={22} strokeWidth={1.5} />
+                    </a>
+                  )}
+                  {chrome.social.tiktok && (
+                    <a
+                      href={chrome.social.tiktok}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="TikTok"
+                      className="hover:opacity-60 transition-opacity"
+                    >
+                      <Music2 size={22} strokeWidth={1.5} />
+                    </a>
+                  )}
+                  {chrome.social.linkedin && (
+                    <a
+                      href={chrome.social.linkedin}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="LinkedIn"
+                      className="hover:opacity-60 transition-opacity"
+                    >
+                      <Linkedin size={22} strokeWidth={1.5} />
+                    </a>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </section>

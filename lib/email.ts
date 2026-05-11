@@ -256,6 +256,73 @@ export async function sendSiteLive(input: {
   return send({ to: input.to, subject, html });
 }
 
+/**
+ * "New lead from <name>" — sent to the tenant's `contact_email` (or
+ * the realtor's preferred notify address) the moment a public form
+ * submit lands in `leads`. Best-effort: a send failure logs but
+ * never breaks the submit response.
+ *
+ * The body is a compact card with the lead's name + contact + the
+ * message body, plus a deep link straight to the tenant's inbox so
+ * the realtor can mark it triaged in one click.
+ */
+export async function sendLeadNotification(input: {
+  to: string;
+  tenantName: string;
+  source: string;
+  leadName?: string;
+  leadEmail?: string;
+  leadPhone?: string;
+  message?: string;
+  inboxUrl?: string;
+}) {
+  const lead = input.leadName?.trim() || "a new lead";
+  const subject = `New lead from ${lead}`;
+  const rows: string[] = [];
+  if (input.leadName)
+    rows.push(
+      `<tr><td style="padding: 6px 0; color: rgba(20,40,64,0.55); width: 100px;">Name</td><td>${escape(input.leadName)}</td></tr>`,
+    );
+  if (input.leadEmail)
+    rows.push(
+      `<tr><td style="padding: 6px 0; color: rgba(20,40,64,0.55);">Email</td><td><a href="mailto:${escape(input.leadEmail)}">${escape(input.leadEmail)}</a></td></tr>`,
+    );
+  if (input.leadPhone)
+    rows.push(
+      `<tr><td style="padding: 6px 0; color: rgba(20,40,64,0.55);">Phone</td><td>${escape(input.leadPhone)}</td></tr>`,
+    );
+  rows.push(
+    `<tr><td style="padding: 6px 0; color: rgba(20,40,64,0.55);">Source</td><td>${escape(input.source)}</td></tr>`,
+  );
+  const messageBlock = input.message
+    ? `<div style="margin-top: 20px; padding: 16px 18px; border-left: 3px solid #142840; background: rgba(20,40,64,0.05); white-space: pre-wrap; font-size: 14px; line-height: 1.65;">${escape(input.message)}</div>`
+    : "";
+  const cta = input.inboxUrl
+    ? `<p style="margin-top: 28px;">
+  <a href="${escape(input.inboxUrl)}"
+     style="display: inline-block; padding: 12px 22px; background: #142840; color: white; text-decoration: none; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; font-weight: 500;">
+    Open in inbox →
+  </a>
+</p>`
+    : "";
+  const html = shell(`
+<h1 style="font-size: 20px; font-weight: 500; margin: 0 0 4px;">New lead — ${escape(input.tenantName)}</h1>
+<p style="margin-top: 4px; color: rgba(20,40,64,0.65); font-size: 13px;">
+  Reply to this email to respond directly to the lead.
+</p>
+<table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 18px;">
+${rows.join("\n")}
+</table>
+${messageBlock}
+${cta}
+`);
+  return send({
+    to: input.to,
+    subject,
+    html,
+  });
+}
+
 // Tiny HTML escaper to keep our template insertions safe.
 function escape(s: string): string {
   return s

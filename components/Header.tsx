@@ -10,13 +10,38 @@ import MenuDrawer from "./MenuDrawer";
 export default function Header({
   portraitAvatar,
   realtorName,
+  role,
   brokerage,
+  phone,
+  phoneHref,
+  email,
+  emailHref,
+  socialInstagram,
+  socialFacebook,
+  socialTiktok,
+  socialLinkedin,
   customNavPages = [],
+  communityChildren = [],
 }: {
   portraitAvatar?: string;
   realtorName?: string;
+  /** "Realtor", "Broker Associate", "Team Lead", etc — from brand.identity.role */
+  role?: string;
   brokerage?: string;
+  /** Direct contact + socials are passed straight through to MenuDrawer
+   *  so client components don't have to import the server-only chrome
+   *  resolver. Header itself doesn't render them, just forwards. */
+  phone?: string;
+  phoneHref?: string;
+  email?: string;
+  emailHref?: string;
+  socialInstagram?: string;
+  socialFacebook?: string;
+  socialTiktok?: string;
+  socialLinkedin?: string;
   customNavPages?: { slug: string; title: string }[];
+  /** Per-tenant community submenu items, fed straight through to MenuDrawer. */
+  communityChildren?: { slug: string; name: string }[];
 }) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
@@ -76,6 +101,7 @@ export default function Header({
             variant={logoVariant}
             portraitAvatar={portraitAvatar}
             realtorName={realtorName}
+            role={role}
           />
 
           <div className="flex items-center gap-3 md:gap-6">
@@ -102,8 +128,18 @@ export default function Header({
         onClose={() => setOpen(false)}
         portraitAvatar={portraitAvatar}
         realtorName={realtorName}
+        role={role}
         brokerage={brokerage}
+        phone={phone}
+        phoneHref={phoneHref}
+        email={email}
+        emailHref={emailHref}
+        socialInstagram={socialInstagram}
+        socialFacebook={socialFacebook}
+        socialTiktok={socialTiktok}
+        socialLinkedin={socialLinkedin}
         customNavPages={customNavPages}
+        communityChildren={communityChildren}
       />
     </>
   );
