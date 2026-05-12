@@ -662,8 +662,18 @@ export async function aiPolishWholeSite(
     .maybeSingle();
   if (!tenant) return { ok: false, error: "Tenant not found." };
 
+  // Source priority:
+  //   1. tenants.intake_data (filled by master on a hand-created tenant)
+  //   2. prospects.intake_data (wizard submission, linked via prospect_id)
+  //   3. synthesized minimum (just name + brokerage + state)
   let intake: IntakeData | null = null;
-  if (tenant.prospect_id) {
+  const { data: tenantIntake } = await supabase
+    .from("tenants")
+    .select("intake_data")
+    .eq("id", tenant.id)
+    .maybeSingle();
+  intake = (tenantIntake?.intake_data ?? null) as IntakeData | null;
+  if (!intake && tenant.prospect_id) {
     const { data: prospect } = await supabase
       .from("prospects")
       .select("intake_data")
@@ -759,6 +769,81 @@ export async function aiPolishWholeSite(
     okCount: pages.filter((p) => p.ok).length,
     errCount: pages.filter((p) => !p.ok).length,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Tenant intake — Phase 32 (hand-created tenants get the same
+// questionnaire the public wizard collects, so AI Polish has rich
+// context to write bespoke copy with).
+// ─────────────────────────────────────────────────────────────────────
+
+export type SaveIntakeInput = IntakeData;
+
+export async function saveTenantIntake(
+  slug: string,
+  intake: SaveIntakeInput,
+  opts?: { thenPolish?: boolean },
+): Promise<Result & { polished?: AiPolishSiteResult | null }> {
+  const { supabase } = await requireSuperAdmin();
+
+  if (!intake.realtor_full_name?.trim() || !intake.brokerage_name?.trim()) {
+    return {
+      ok: false,
+      error: "Realtor full name and brokerage are required.",
+    };
+  }
+
+  // Resolve tenant id from slug (intake is stored on the tenants row).
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id, realtor_name, brokerage, state_abbr")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!tenant) return { ok: false, error: "Tenant not found." };
+
+  // Mirror the most-important intake fields back onto the tenants row
+  // so admin/master UIs that read directly from tenants stay in sync
+  // (header titles, footer brokerage, etc.). Email/phone are kept as
+  // contact_email/contact_phone for backwards-compat with how master
+  // and the lifecycle emails reference the tenant.
+  const tenantPatch: Record<string, unknown> = {
+    intake_data: intake,
+    realtor_name: intake.realtor_full_name.trim(),
+    brokerage: intake.brokerage_name.trim(),
+  };
+  if (intake.email?.trim()) tenantPatch.contact_email = intake.email.trim();
+  if (intake.phone?.trim()) tenantPatch.contact_phone = intake.phone.trim();
+  // Pick the first licensed state as the row's `state_abbr` so the
+  // tenant listing + Brand panel know which state this site is in.
+  const firstState = (intake.licensed_states ?? [])
+    .map((l) => l.state_abbr?.trim().toUpperCase())
+    .filter(Boolean)[0];
+  if (firstState) tenantPatch.state_abbr = firstState;
+
+  const { error: upErr } = await supabase
+    .from("tenants")
+    .update(tenantPatch)
+    .eq("id", tenant.id);
+  if (upErr) return { ok: false, error: upErr.message };
+
+  revalidatePath(`/master/tenants/${slug}`);
+  revalidatePath(`/master/tenants/${slug}/intake`);
+
+  if (opts?.thenPolish) {
+    const polished = await aiPolishWholeSite(slug);
+    if (polished.ok) {
+      return { ok: true, slug, polished };
+    }
+    // Intake save succeeded but polish failed — surface the polish
+    // error without rolling back the saved intake.
+    return {
+      ok: true,
+      slug,
+      polished: null,
+    };
+  }
+
+  return { ok: true, slug };
 }
 
 // ─────────────────────────────────────────────────────────────────────

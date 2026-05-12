@@ -57,7 +57,12 @@ export default function TenantForm({ initial, editingId }: Props) {
       }
       setSavedAt(Date.now());
       const slug = res.slug ?? v.slug;
-      if (!editingId || slug !== initial?.slug) {
+      if (!editingId) {
+        // Brand-new tenant — drop the operator straight into the
+        // intake questionnaire so AI Polish has real source data to
+        // work with instead of just the bare identity fields.
+        router.push(`/master/tenants/${slug}/intake?from=new`);
+      } else if (slug !== initial?.slug) {
         router.push(`/master/tenants/${slug}`);
       } else {
         router.refresh();

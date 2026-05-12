@@ -30,7 +30,7 @@ export default async function TenantDetailPage({
   const { data: tenant } = await supabase
     .from("tenants")
     .select(
-      "id, slug, custom_domain, realtor_name, brokerage, contact_email, contact_phone, state_abbr, status, created_at, provisioned_at, features, stripe_customer_id, domain_target, domain_check_state, domain_check_value, domain_checked_at, domain_verified_at, netlify_alias_added_at, netlify_alias_synced_for, netlify_alias_error, netlify_last_synced_at, lifecycle_stage, preview_token",
+      "id, slug, custom_domain, realtor_name, brokerage, contact_email, contact_phone, state_abbr, status, created_at, provisioned_at, features, stripe_customer_id, domain_target, domain_check_state, domain_check_value, domain_checked_at, domain_verified_at, netlify_alias_added_at, netlify_alias_synced_for, netlify_alias_error, netlify_last_synced_at, lifecycle_stage, preview_token, intake_data, prospect_id",
     )
     .eq("slug", slug)
     .maybeSingle();
@@ -98,6 +98,64 @@ export default async function TenantDetailPage({
         /{tenant.slug}
         {tenant.custom_domain && ` · ${tenant.custom_domain}`}
       </p>
+
+      {/* Intake-missing banner — flagged prominently so a hand-created
+          tenant doesn't slip through with no AI Polish source data.
+          Hidden once intake_data is filled OR the tenant has a linked
+          prospect with intake_data (wizard-created tenants don't need
+          this prompt). */}
+      {!tenant.intake_data && !tenant.prospect_id && (
+        <div
+          className="p-3 rounded-md mb-6 flex items-start gap-3 text-[12px]"
+          style={{
+            background:
+              "color-mix(in srgb, var(--primary) 6%, var(--card))",
+            border:
+              "1px solid color-mix(in srgb, var(--primary) 22%, transparent)",
+          }}
+        >
+          <span
+            className="flex h-6 w-6 items-center justify-center rounded-md shrink-0"
+            style={{
+              background:
+                "color-mix(in srgb, var(--primary) 14%, transparent)",
+              color: "var(--primary)",
+              fontWeight: 700,
+            }}
+          >
+            !
+          </span>
+          <div style={{ flex: 1 }}>
+            <p
+              style={{
+                color: "var(--card-foreground)",
+                fontWeight: 600,
+                marginBottom: 2,
+              }}
+            >
+              Intake not filled — AI Polish has nothing to work with.
+            </p>
+            <p
+              style={{
+                color: "var(--muted-foreground)",
+                lineHeight: 1.6,
+              }}
+            >
+              This tenant was created by hand, so the realtor&apos;s
+              bio, voice direction, and service areas are missing.
+              Without them AI Polish writes generic copy. Fill the
+              intake once and AI Polish becomes specific.
+            </p>
+          </div>
+          <Link
+            href={`/master/tenants/${slug}/intake`}
+            className="admin-btn admin-btn-secondary text-xs"
+            style={{ flexShrink: 0 }}
+          >
+            Fill intake
+          </Link>
+        </div>
+      )}
 
       {/* Quick links.
           - When the tenant has a custom domain AND status is active,
