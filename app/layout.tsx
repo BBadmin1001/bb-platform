@@ -121,6 +121,7 @@ export default async function RootLayout({
   const hideShell =
     path.startsWith("/admin") ||
     path.startsWith("/master") ||
+    path.startsWith("/sales") ||
     path.startsWith("/get-started") ||
     path.startsWith("/onboarding");
 

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/master";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { SETUP_FEE_MIN_CENTS } from "@/lib/salesRepConstants";
 
 type Result = { ok: true; slug?: string } | { ok: false; error: string };
@@ -68,6 +68,101 @@ export async function deleteSalesRep(id: string): Promise<Result> {
   return { ok: true };
 }
 
+/**
+ * One-click "Invite rep" — uses Supabase auth.admin.inviteUserByEmail
+ * to send the rep an invite email. They click the link, set a
+ * password, and on first /sales visit the requireSalesRep helper
+ * auto-links their auth user to the sales_reps row by email match.
+ *
+ * Idempotent for the auth user side — if Supabase rejects with
+ * "user already exists" we surface a friendly message but still
+ * write the user_id linkback if we can find the user. The
+ * sales_reps row must already exist (created via the manager UI).
+ */
+export async function inviteSalesRep(
+  repId: string,
+): Promise<
+  | { ok: true; message: string }
+  | { ok: false; error: string }
+> {
+  await requireSuperAdmin(); // gate: super admins only
+
+  const svc = createServiceClient();
+  const { data: rep, error: repErr } = await svc
+    .from("sales_reps")
+    .select("id, email, full_name, user_id")
+    .eq("id", repId)
+    .maybeSingle();
+  if (repErr || !rep) return { ok: false, error: "Rep not found." };
+  if (!rep.email) {
+    return {
+      ok: false,
+      error: "Rep has no email on file — add one first, then invite.",
+    };
+  }
+  if (rep.user_id) {
+    return {
+      ok: true,
+      message:
+        "This rep is already linked to a Supabase user. They can sign in at /admin/login.",
+    };
+  }
+
+  const origin =
+    process.env.NEXT_PUBLIC_SITE_ORIGIN ||
+    (process.env.NEXT_PUBLIC_MASTER_HOSTNAME
+      ? `https://${process.env.NEXT_PUBLIC_MASTER_HOSTNAME}`
+      : "https://bb-platform-387.netlify.app");
+
+  // Supabase auth admin API — sends an invite email with a magic
+  // link the rep clicks to set their password.
+  const { data, error } = await svc.auth.admin.inviteUserByEmail(
+    rep.email as string,
+    {
+      redirectTo: `${origin}/sales`,
+      data: { full_name: rep.full_name, role: "sales_rep" },
+    },
+  );
+  if (error) {
+    // Existing-user case — pretend success, just remind master.
+    if (
+      /already.*registered|already.*exists/i.test(error.message ?? "")
+    ) {
+      // Try to find the existing user and link them by email match.
+      const { data: listed } = await svc.auth.admin.listUsers();
+      const existing = listed?.users.find(
+        (u) => u.email?.toLowerCase() === (rep.email as string).toLowerCase(),
+      );
+      if (existing) {
+        await svc
+          .from("sales_reps")
+          .update({ user_id: existing.id })
+          .eq("id", rep.id);
+      }
+      return {
+        ok: true,
+        message:
+          "This email already has an account. Linked it to the rep — they can sign in at /admin/login.",
+      };
+    }
+    return { ok: false, error: `Couldn't send invite: ${error.message}` };
+  }
+  // Pre-link if we got the new user id back so the rep skips the
+  // email-match fallback on first sign-in.
+  if (data?.user?.id) {
+    await svc
+      .from("sales_reps")
+      .update({ user_id: data.user.id })
+      .eq("id", rep.id);
+  }
+
+  revalidatePath("/master/sales-reps");
+  return {
+    ok: true,
+    message: `Invite sent to ${rep.email}. They'll get an email to set their password.`,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Per-client onboarding links (Phase 18)
 // ─────────────────────────────────────────────────────────────────────
@@ -96,7 +191,7 @@ export async function createSalesRepLink(input: {
   agreed_setup_cents: number;
   notes?: string;
 }): Promise<
-  | { ok: true; link_token: string; url: string }
+  | { ok: true; link_id: string; link_token: string; url: string }
   | { ok: false; error: string }
 > {
   const { supabase, user } = await requireSuperAdmin();
@@ -138,16 +233,22 @@ export async function createSalesRepLink(input: {
     .maybeSingle();
   if (existing) token = generateLinkToken();
 
-  const { error } = await supabase.from("sales_rep_links").insert({
-    rep_id: input.rep_id,
-    link_token: token,
-    client_label: label,
-    client_email: input.client_email?.trim().toLowerCase() || null,
-    notes: input.notes?.trim() || null,
-    agreed_setup_cents: input.agreed_setup_cents,
-    created_by: user.id,
-  });
-  if (error) return { ok: false, error: error.message };
+  const { data: created, error } = await supabase
+    .from("sales_rep_links")
+    .insert({
+      rep_id: input.rep_id,
+      link_token: token,
+      client_label: label,
+      client_email: input.client_email?.trim().toLowerCase() || null,
+      notes: input.notes?.trim() || null,
+      agreed_setup_cents: input.agreed_setup_cents,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (error || !created) {
+    return { ok: false, error: error?.message ?? "Insert failed." };
+  }
 
   // Build the public URL the rep will send the client. Use the
   // platform's configured master hostname; fall back to the Netlify
@@ -160,7 +261,7 @@ export async function createSalesRepLink(input: {
   const url = `${origin}/get-started?link=${token}`;
 
   revalidatePath("/master/sales-reps");
-  return { ok: true, link_token: token, url };
+  return { ok: true, link_id: created.id, link_token: token, url };
 }
 
 /**
@@ -195,7 +296,7 @@ export async function createMyClientLink(input: {
   agreed_setup_cents: number;
   notes?: string;
 }): Promise<
-  | { ok: true; link_token: string; url: string }
+  | { ok: true; link_id: string; link_token: string; url: string }
   | { ok: false; error: string }
 > {
   const supabase = await createClient();
@@ -251,16 +352,22 @@ export async function createMyClientLink(input: {
       Math.random().toString(36).slice(2, 10) +
       Math.random().toString(36).slice(2, 10);
 
-  const { error } = await supabase.from("sales_rep_links").insert({
-    rep_id: rep.id,
-    link_token: token,
-    client_label: realtor_name,
-    client_email: input.client_email?.trim().toLowerCase() || null,
-    notes: input.notes?.trim() || null,
-    agreed_setup_cents: input.agreed_setup_cents,
-    created_by: user.id,
-  });
-  if (error) return { ok: false, error: error.message };
+  const { data: created, error } = await supabase
+    .from("sales_rep_links")
+    .insert({
+      rep_id: rep.id,
+      link_token: token,
+      client_label: realtor_name,
+      client_email: input.client_email?.trim().toLowerCase() || null,
+      notes: input.notes?.trim() || null,
+      agreed_setup_cents: input.agreed_setup_cents,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (error || !created) {
+    return { ok: false, error: error?.message ?? "Insert failed." };
+  }
 
   const origin =
     process.env.NEXT_PUBLIC_SITE_ORIGIN ||
@@ -271,6 +378,7 @@ export async function createMyClientLink(input: {
   revalidatePath("/sales");
   return {
     ok: true,
+    link_id: created.id,
     link_token: token,
     url: `${origin}/get-started?link=${token}`,
   };

@@ -800,3 +800,127 @@ Both can be pruned from the DB by Umair when he's done inspecting. Neither has a
 - `/admin/reviews` route (A3-005 — 404)
 - Seeded brand.contact block (A3-006 — never written)
 - Netlify alias sync (A3-012 — config issue)
+
+---
+
+### Agent 4 — Sales rep flow E2E (2026-05-11)
+
+**Test artifacts created (leave in DB for Umair to inspect / prune):**
+- Auth user: `qa4-rep+test@brandbonjour.com` (id `b806a2bc-1885-4aa9-ba45-970c0641cdd0`)
+- Sales rep: `qa4-rep` / "QA Four Rep" (id `4c9df2e0-95cb-45e9-8400-4362f40ac8f5`, manually linked `user_id` post-hoc as workaround for A4-001)
+- Links: `67frs0wzfiww0n7d` ("Tester Smith", $600, **active, submitted, prospect attached**), `a3el0518ebqe4dev` ("Big Deal LLC", $1500, **disabled — intentional**)
+- Prospect: `qa4-prospect+test@brandbonjour.com` / "QA Prospect" / "QA Brokerage" (id `d4b5567e-682d-46a5-a2bf-9128639a9760`, status stuck at `new` — see A4-005)
+
+**Stage outcomes:**
+
+| Stage | Description | Result |
+|-------|-------------|--------|
+| 0 | Pre-flight `curl /sales` → 307 | PASS |
+| 1 | Master creates rep `qa4-rep` via UI | PASS (rep row created, slug, email, is_active, user_id=null) |
+| 2 | Supabase admin createUser for the rep | PASS (auth user created, email_confirmed) |
+| 3 | Master URL blocks for signed-in rep (`/master`, `/master/tenants`, `/master/sales-reps`, `/master/prospects`, `/master?tenant=samina`) | PASS — all redirect to `/sales` |
+| 3a | Rep can actually reach `/sales` on first sign-in | **FAIL — A4-001 blocker** (RLS catch-22 prevents email→user_id auto-link; fresh rep gets bounced to /admin until master manually links user_id) |
+| 4 | Rep dashboard renders all expected widgets | PASS for content (name, stat cards, 6-month strip, link form, prospects list, sign-out) BUT **FAIL** for layout (A4-003 — public site header/footer chrome bleeds onto /sales) |
+| 5a | $500 (below min) → error, no DB row | PASS |
+| 5b | empty realtor name + $600 → error, no DB row | PASS |
+| 5c | $599 → error, no DB row | PASS |
+| 5d | $600 + "Tester Smith" + email + notes → link `67frs0wzfiww0n7d` + DB row with `agreed_setup_cents=60000, client_label="Tester Smith", is_active=true` | PASS |
+| 5e | $1500 + "Big Deal LLC" → second link `a3el0518ebqe4dev` | PASS |
+| 5f | Deactivate Big Deal LLC link | PARTIAL — DB toggle worked on the second attempt after a page reload, but the first click after creation produced "Link not found." error (see A4-002, optimistic-state UUID-vs-token bug) |
+| 6 | Customer opens link in clean browser, sees $600 sealed price + email prefill | PARTIAL — sealed price ✓, prefill email ✓ ONLY when localStorage is clean; the wizard's restore-draft useEffect clobbers prefill if `bb-intake-draft-v1` exists from a prior visit (A4-007). `clicked_at` was **never stamped** in DB despite multiple successful page loads (A4-004) |
+| 7a | Tamper URL `&price=100` → wizard still shows $600 | PASS |
+| 7b | Disabled link → "This onboarding link has been deactivated." | PASS |
+| 8 | Fill all 6 wizard steps + submit → Stripe Checkout redirect at $600 | PASS — redirected to `https://buy.stripe.com/test_3cIaEWbi2e9b9YX60p8IU03` with $600.00 displayed. Did not complete payment (Stripe browser sandbox blocks automation per Agent 3 notes). |
+| 9a | Master `/master/prospects` shows new prospect with rep displayed as full name "QA Four Rep" | PASS for visibility + name display; **FAIL** for status (shows "NEW" instead of "QUOTED" — A4-005) |
+| 9b | Rep dashboard shows 1 in pipeline + $600 revenue + link status "SUBMITTED" + prospect "NEW" | PASS — all four stats correct; the SUBMITTED pill on the link is correctly shown |
+| 9c | DB: `sales_rep_links.submitted_at` + `prospect_id` populated for the link | PASS |
+| 9d | Resend logs show customer intake-received email + internal new-paid-prospect email | PARTIAL — internal email to admin@ delivered, customer email to `qa4-prospect+test@brandbonjour.com` **bounced** (Resend doesn't accept the `+test` alias — informational, not a code bug) |
+
+**Headline question: did the rep → link → wizard → payment-redirect → prospect-attribution round-trip work?**
+**YES, end-to-end** (modulo two non-blocking caveats: A4-001 required a one-shot DB poke to link user_id before the rep could even reach /sales, and Stripe Checkout completion couldn't be automated). Master sees the prospect attributed to QA Four Rep; rep sees the prospect in their pipeline at $600 with a SUBMITTED link.
+
+---
+
+#### Bugs
+
+**[A4-001]** *(severity: blocker)* — Brand-new sales rep cannot sign in to /sales until master manually pokes `sales_reps.user_id`.
+- Where: `lib/salesRepAuth.ts` (lines 96–117) + `supabase/migrations/0011_sales_rep_auth.sql` RLS policy `"sales reps read self"`.
+- Repro:
+  1. Master creates a new rep via /master/sales-reps with email X (user_id null).
+  2. Use `supabase.auth.admin.createUser({email: X, password: …, email_confirm: true})` to create the auth user.
+  3. Sign in to /admin with email X.
+  4. Navigate to /sales.
+- Expected: rep lands on /sales dashboard (the email-fallback branch in requireSalesRep is supposed to auto-link user_id).
+- Actual: rep redirects to /admin (or whichever tenant the bb-master-tenant cookie points at — see A4-006). Both `select where user_id = auth.uid()` AND `select where email = X` return null because RLS policy `"sales reps read self"` filters with `user_id = auth.uid()` — and the row's user_id is still null on first sign-in, so the rep cannot read their own row to bootstrap the user_id link. Verified by running both queries directly via the anon-key supabase client with the rep's session: both return null with no error.
+- Workaround used: ran `update sales_reps set user_id = '<auth-user-id>' where slug = 'qa4-rep'` via service role from a script.
+
+**[A4-002]** *(severity: major)* — Rep's "Deactivate" toggle on a JUST-created link errors with "Link not found." until page reload.
+- Where: `components/sales/RepDashboard.tsx` lines 440-454 — optimistic-state insert uses `id: res.link_token` instead of the real DB UUID. `setMyLinkActive(linkId)` then looks up by id and 404s.
+- Repro: rep generates a link → immediately clicks Deactivate without reloading → see "Link not found." Reload page → click Deactivate → works.
+- Expected: deactivate works immediately on freshly-created links.
+- Actual: errors out because the optimistic id is the token, not the UUID. After F5, the server pulls the real UUID and toggle works.
+
+**[A4-003]** *(severity: major)* — Public tenant site Header + Footer chrome render on top of `/sales` dashboard.
+- Where: `app/layout.tsx` lines 116-125 — `hideShell` list excludes `/sales`.
+- Repro: sign in as rep, visit /sales — observe the tenant header (Jordan T. Tester branding when bb-master-tenant cookie is set, or a generic "REALTOR / REALTOR" placeholder when cleared) and full tenant footer rendering around the actual sales dashboard.
+- Expected: /sales is a platform-staff surface and should be chrome-free (same as /admin and /master).
+- Actual: tenant Header + Footer wrap the rep dashboard. The native RepHeader inside the page is partially obscured by the public header.
+- Trivial fix: add `path.startsWith("/sales")` to the hideShell condition.
+
+**[A4-004]** *(severity: major)* — `sales_rep_links.clicked_at` never gets stamped despite the wizard rendering with the link token.
+- Where: `app/get-started/page.tsx` lines 38-44 — fire-and-forget `void supabase.from("sales_rep_links").update({clicked_at: …}).eq("id", link.id)` against the service-role client.
+- Repro: hit `/get-started?link=<token>` in a fresh browser → wizard renders correctly with the sealed price → check DB: `clicked_at` stays null. Verified across multiple loads + a 5-second delay.
+- Expected: first page-render sets clicked_at to now() for conversion analytics.
+- Actual: never set. Possibly the void promise is being abandoned by the serverless runtime before the request completes, or the createServiceClient call returns a client that doesn't persist writes in this Next 16 RSC context. Either way, conversion funnel data is broken — "Clicked" pill on the rep dashboard will never light up before "Submitted."
+- Note: `submitted_at` DOES get stamped correctly because that update lives inside the awaited server-action body (`submitIntakeWizard`).
+
+**[A4-005]** *(severity: major)* — Submitted prospect stays at `status='new'` instead of advancing to `status='quoted'` after the Stripe Payment Link is created.
+- Where: `app/get-started/actions.ts` lines 260-267 — the update runs through the awaited `createClient()` (anon-session) supabase client, but there's no INSERT-then-UPDATE RLS policy that grants the anon user permission to update the row they just inserted.
+- Repro: complete the wizard with a sealed price → land on Stripe Checkout (proof the payment-link creation succeeded) → check `prospects` row: `status='new'`, `stripe_payment_link_url=null`.
+- Expected: status becomes "quoted", `stripe_payment_link_url` and `stripe_payment_link_id` set so master can re-send the checkout URL later.
+- Actual: status frozen at new, payment-link fields null. The rep dashboard pill shows "NEW" instead of "QUOTED," and master/prospects shows "NEW" as well. Master cannot recover the Stripe URL after the customer abandons checkout.
+- Suggested fix: switch this update to a service-role client (the prospect.id was just minted, no leak), OR add a "prospect can update self for 5min after insert" RLS policy keyed on `intake_submitted_at`.
+
+**[A4-006]** *(severity: blocker)* — Sales rep can use a stale `bb-master-tenant` cookie to enter a tenant admin and edit Brand Identity, Content, Media Library, Custom Pages, Reviews, Communities, Closings — i.e. impersonate a tenant they have no membership in.
+- Where: `proxy.ts` lines 50-60 (cookie fallback) + the tenant-admin auth flow that trusts `bb-master-tenant` cookie regardless of who the signed-in user is.
+- Repro:
+  1. Master signs in, visits `/master/tenants/jordan-t-tester-93pq` (or any tenant) — this writes `bb-master-tenant=jordan-t-tester-93pq` cookie scoped to /.
+  2. Master signs out. Cookie persists (8-hour maxAge per proxy.ts line 205).
+  3. Rep signs in to /admin in the same browser. Visits /admin (no query). Lands on Jordan's tenant admin dashboard with full edit access to that tenant's content — same level a tenant owner would have.
+  4. (Or: rep signs in to /sales, then types /admin directly into the address bar — same result.)
+- Expected: tenant admin access requires explicit tenant membership (via `tenant_users` join or super_admin role). A signed-in sales rep with no tenant association should land on a "you have no tenant" page or be redirected back to /sales.
+- Actual: the cookie alone unlocks the entire tenant admin shell for any signed-in user. This is privilege escalation in a multi-tenant SaaS — a rep, a stale super-admin's machine handed off to a contractor, or a shared kiosk could all be exploited.
+- Note this is similar to but distinct from Agent 3's A3-004 which was about reads. A4-006 is about WRITES through the admin UI.
+
+**[A4-007]** *(severity: minor)* — Customer email pre-fill from the link token is silently overridden by an older localStorage draft.
+- Where: `components/IntakeWizard.tsx` lines 116-149 — initial state seeds `email = prefillEmail`, then a mount-time useEffect does `setData(prev => ({...prev, ...parsed}))` and clobbers the prefilled email if the saved draft has an empty/older email.
+- Repro: visit any /get-started wizard once (don't complete it) → close tab → open `/get-started?link=<token>` for a DIFFERENT link with a customer email encoded → contact step shows empty email instead of the encoded one. Verified by inspecting the SSR HTML (which DOES have `value="qa4-prospect+test@brandbonjour.com"`) vs the live React state (empty).
+- Expected: link's encoded email always wins over the local draft (or the wizard surfaces a "use sealed email?" prompt).
+- Actual: any old localStorage clobbers the link prefill. Fresh-browser customer is fine; repeat customer in the same browser hits an empty email field.
+
+**[A4-008]** *(severity: minor)* — Rep's sign-out from /sales sometimes leaves the auth session alive (re-navigating to /admin lands on a logged-in tenant admin instead of the login form).
+- Where: the rep header's Sign out button calls Supabase signOut but the page redirect afterward doesn't always purge the session cookie before the next navigation reads it.
+- Repro: sign in as rep → /sales → click Sign out → manually navigate to /admin within ~2 seconds → see Jordan T. Tester's admin (still signed in).
+- Expected: Sign out cleanly destroys the session, /admin renders the login form.
+- Actual: cookie lingers briefly; rep can still navigate into a tenant admin (compounded by A4-006).
+
+---
+
+#### Recommendations
+
+**[R-A4-001]** — Fix A4-001 by also reading `sales_reps` through a service-role client in `requireSalesRep` for the email-fallback path. The lookup is by email + the user is authenticated, so service-role doesn't widen the attack surface — and it solves the bootstrap RLS catch-22.
+
+**[R-A4-002]** — Add `path.startsWith("/sales")` to `hideShell` in `app/layout.tsx` line 121. One-line fix for A4-003.
+
+**[R-A4-003]** — Stop the cookie-only tenant impersonation in A4-006. The `requireTenantUser` call in tenant admin pages should require either (a) a `tenant_users` membership row for `(user_id, tenant_id)` or (b) `is_super_admin(user_id)`. The `bb-master-tenant` cookie should only resolve the *visual* tenant context — it must not bypass authorization. (This may already be the intent; verify the actual server-side gate inside `/admin/*` pages and tighten if it's currently trusting the cookie alone.)
+
+**[R-A4-004]** — For A4-005, do the prospect status update via `createServiceClient()` inside `submitIntakeWizard`. The customer just inserted their own row; the service role write is safe and avoids the RLS dance.
+
+**[R-A4-005]** — For A4-007, make the IntakeWizard prefer the link-encoded email over the localStorage draft (the draft can override on every other field, but `email`, `linkToken`, and `agreedSetupCents` should be source-of-truth from the URL).
+
+**[R-A4-006]** — For A4-004, await the clicked_at update (or move it into the route segment's middleware, or use a `Promise.allSettled` with an explicit `waitUntil` if Netlify supports it). Conversion funnel analytics are dead without this.
+
+**[R-A4-007]** — Document in `/master/sales-reps` that creating a rep via the UI requires a follow-up DB poke to link the auth user (or, better, wire the rep-creation action to also call `auth.admin.createUser` + `update user_id` so it's a single one-screen flow for master). Today a rep gets created without an auth account at all and has no way to discover that they need one.
+
+**[R-A4-008]** — Consider a "Sent by: QA Four Rep" line on the wizard review step instead of the raw slug "qa4-rep" — the customer sees `Sent by: qa4-rep` today which is uglier than necessary and exposes the internal slug.
+

@@ -439,7 +439,8 @@ function LinkGenerator({
       setLastCreated({ token: res.link_token, url: res.url });
       setLinks([
         {
-          id: res.link_token,
+          // Real row id from server so deactivate works (A4-002).
+          id: res.link_id,
           link_token: res.link_token,
           client_label: realtorName.trim(),
           client_email: clientEmail.trim() || null,

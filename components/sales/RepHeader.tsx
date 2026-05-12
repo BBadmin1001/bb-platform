@@ -23,8 +23,10 @@ export default function RepHeader({
   async function signOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/admin/login");
-    router.refresh();
+    // Hard-reload instead of router.push so the server-side proxy
+    // observes the cleared session immediately (A4-008 — was racing
+    // on a soft client navigation that kept the old session).
+    window.location.href = "/admin/login";
   }
 
   function switchTo(slug: string) {

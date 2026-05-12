@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getCurrentTenantSlug } from "@/lib/tenant/context";
 import { createPaymentLinkForQuote, isStripeConfigured } from "@/lib/stripe";
 import {
@@ -214,9 +214,11 @@ export async function submitIntakeWizard(
 
   // If this prospect came in via a tracked link, stamp the link row
   // with submitted_at + prospect_id for conversion analytics.
+  // Service-role: same RLS issue as the prospect update above (anon
+  // user can't write to sales_rep_links beyond the insert policy).
   if (linkRowId) {
-    const supabase = await createClient();
-    await supabase
+    const svc = createServiceClient();
+    await svc
       .from("sales_rep_links")
       .update({
         submitted_at: new Date().toISOString(),
@@ -257,7 +259,13 @@ export async function submitIntakeWizard(
           successUrl,
         });
 
-        await supabase
+        // Use service-role for this update: the customer is anonymous
+        // (cookie-bound `supabase` is anon-keyed) and RLS on `prospects`
+        // restricts updates to super admins. Without service-role
+        // this UPDATE silently no-ops, leaving prospects stuck at
+        // status='new' with no checkout URL on file (A4-005).
+        const svc = createServiceClient();
+        await svc
           .from("prospects")
           .update({
             stripe_payment_link_id: link.paymentLinkId,

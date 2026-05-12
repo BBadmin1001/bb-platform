@@ -49,24 +49,15 @@ export async function proxy(request: NextRequest) {
   const url = new URL(request.url);
   const host = request.headers.get("host") ?? url.host;
 
-  // Build an "effective" searchParams that falls back to the sticky
-  // cookie when no explicit ?tenant= is in the URL. This is the fix
-  // for "no tenant in context" errors after navigating inside the
-  // admin via a normal <Link> that doesn't preserve the query.
   const explicitTenant = url.searchParams.get("tenant");
   const cookieTenant = request.cookies.get(MASTER_TENANT_COOKIE)?.value;
-  const effectiveSearchParams = new URLSearchParams(url.searchParams);
-  if (!explicitTenant && cookieTenant) {
-    effectiveSearchParams.set("tenant", cookieTenant);
-  }
 
-  const ctx = await resolveTenant(host, effectiveSearchParams);
-
-  // ── Auth refresh + /admin gate ─────────────────────────────────────
-  // Build a mutable response so Supabase can write refreshed auth
-  // cookies on it. We'll merge our own tenant headers in at the end.
+  // ── Auth refresh ──────────────────────────────────────────────────
+  // Run BEFORE tenant resolution so we know whether the user is a
+  // super admin and can decide whether to honor the sticky cookie.
+  // Non-super-admin users with a stale cookie must NOT inherit the
+  // master-view tenant context (A4-006 — privilege escalation).
   let response = NextResponse.next({ request });
-
   let user = null as null | { id: string };
 
   if (
@@ -97,6 +88,43 @@ export async function proxy(request: NextRequest) {
     const { data } = await supabase.auth.getUser();
     user = data.user ? { id: data.user.id } : null;
   }
+
+  // Is this user a super admin? Needed to decide whether the sticky
+  // cookie applies. One DB read per request — acceptable for the
+  // security guarantee.
+  let isSuperAdmin = false;
+  if (user && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const svc = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
+        { cookies: { getAll: () => [], setAll: () => {} } },
+      );
+      const { data } = await svc
+        .from("super_admins")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      isSuperAdmin = !!data;
+    } catch {
+      // If the super-admin check itself fails, default to false —
+      // safer to lose master context than to leak it.
+      isSuperAdmin = false;
+    }
+  }
+
+  // Build an "effective" searchParams that falls back to the sticky
+  // cookie ONLY when the requesting user is a verified super admin.
+  // For everyone else (signed-out users, tenant members, sales reps,
+  // random visitors), the cookie is ignored. Explicit ?tenant= still
+  // works for everyone since that resolves to public/active tenants
+  // only.
+  const effectiveSearchParams = new URLSearchParams(url.searchParams);
+  if (!explicitTenant && cookieTenant && isSuperAdmin) {
+    effectiveSearchParams.set("tenant", cookieTenant);
+  }
+
+  const ctx = await resolveTenant(host, effectiveSearchParams);
 
   // Stamp tenant headers on the resolved request (re-build because the
   // cookie writes above may have replaced `response`).
@@ -190,13 +218,15 @@ export async function proxy(request: NextRequest) {
 
   // Persist the master "viewing as" tenant choice in a cookie so that
   // internal admin links (which don't carry ?tenant=) keep the
-  // tenant in context. Set the cookie:
-  //
-  //   - on explicit ?tenant=<slug>, IF the resolver actually matched
-  //     that slug (avoids saving an invalid slug into the cookie),
-  //   - clear the cookie when the URL says ?tenant= without a value
-  //     (poor-man's "exit master view").
-  if (explicitTenant && ctx.kind === "tenant" && ctx.tenant.slug === explicitTenant.toLowerCase()) {
+  // tenant in context. ONLY set for super admins — A4-006 fix. For
+  // everyone else, clear any stale cookie so a previous master
+  // session can't bleed into the current user's context.
+  if (
+    isSuperAdmin &&
+    explicitTenant &&
+    ctx.kind === "tenant" &&
+    ctx.tenant.slug === explicitTenant.toLowerCase()
+  ) {
     finalResponse.cookies.set(MASTER_TENANT_COOKIE, ctx.tenant.slug, {
       httpOnly: true,
       sameSite: "lax",
@@ -204,8 +234,16 @@ export async function proxy(request: NextRequest) {
       path: "/",
       maxAge: 60 * 60 * 8, // 8 hours — refreshed every time master clicks "Open admin"
     });
-  } else if (url.searchParams.has("tenant") && !explicitTenant) {
-    // ?tenant= with empty value → explicit clear
+  } else if (
+    isSuperAdmin &&
+    url.searchParams.has("tenant") &&
+    !explicitTenant
+  ) {
+    // Super admin hit ?tenant= with empty value → explicit clear.
+    finalResponse.cookies.delete(MASTER_TENANT_COOKIE);
+  } else if (!isSuperAdmin && cookieTenant) {
+    // Non-super-admin holding a stale cookie → wipe it. Belt + suspenders
+    // since we already ignore it during this request.
     finalResponse.cookies.delete(MASTER_TENANT_COOKIE);
   }
 

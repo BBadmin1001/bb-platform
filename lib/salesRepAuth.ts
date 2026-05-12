@@ -1,6 +1,9 @@
 import "server-only";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import {
+  createClient,
+  createServiceClient,
+} from "@/lib/supabase/server";
 
 /**
  * Server-side guard for the `/sales/*` dashboard.
@@ -45,16 +48,22 @@ export async function requireSalesRep(
   /** When set, super-admins view that specific rep's dashboard. */
   actingAsSlug?: string | null,
 ): Promise<RequireSalesRepResult> {
-  const supabase = await createClient();
+  const cookieClient = await createClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await cookieClient.auth.getUser();
   if (!user) {
     redirect("/admin?from=/sales");
   }
 
+  // Service-role for the rep lookup — bypasses the RLS catch-22
+  // where a freshly-created rep with user_id=null can't read their
+  // own row (A4-001). The auth + super-admin checks above happen
+  // through the cookie client and stay in user context.
+  const svc = createServiceClient();
+
   // Are they a super admin?
-  const { data: superRow } = await supabase
+  const { data: superRow } = await svc
     .from("super_admins")
     .select("user_id")
     .eq("user_id", user.id)
@@ -65,7 +74,7 @@ export async function requireSalesRep(
   // via ?rep=<slug>, else the first active rep, else the first rep
   // row at all.
   if (isSuper) {
-    let query = supabase
+    let query = svc
       .from("sales_reps")
       .select("id, slug, full_name, email, is_active, user_id")
       .limit(1);
@@ -94,7 +103,7 @@ export async function requireSalesRep(
   // Real rep — try user_id first, fall back to email match (covers
   // the case where master created the rep before the rep had an
   // account, then the rep signed up with that email).
-  const { data: repByUser } = await supabase
+  const { data: repByUser } = await svc
     .from("sales_reps")
     .select("id, slug, full_name, email, is_active, user_id")
     .eq("user_id", user.id)
@@ -102,14 +111,15 @@ export async function requireSalesRep(
 
   let rep = repByUser as SalesRepRow | null;
   if (!rep && user.email) {
-    const { data: repByEmail } = await supabase
+    const { data: repByEmail } = await svc
       .from("sales_reps")
       .select("id, slug, full_name, email, is_active, user_id")
       .eq("email", user.email.toLowerCase())
       .maybeSingle();
     if (repByEmail) {
-      // Auto-link the user_id on first match.
-      await supabase
+      // Auto-link the user_id on first match — also service-role so
+      // we never trip RLS on the write side.
+      await svc
         .from("sales_reps")
         .update({ user_id: user.id })
         .eq("id", repByEmail.id);

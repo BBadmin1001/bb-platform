@@ -35,9 +35,11 @@ async function resolveLinkToken(token: string | null): Promise<{
     .maybeSingle();
   if (!link) return null;
 
-  // Stamp the first click for conversion analytics. Fire-and-forget.
+  // Stamp the first click for conversion analytics. AWAIT so the
+  // serverless function doesn't terminate the update mid-flight
+  // (A4-004). One row update, sub-100ms — negligible UX cost.
   if (!link.clicked_at) {
-    void supabase
+    await supabase
       .from("sales_rep_links")
       .update({ clicked_at: new Date().toISOString() })
       .eq("id", link.id);

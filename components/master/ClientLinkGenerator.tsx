@@ -110,10 +110,11 @@ export default function ClientLinkGenerator({
         return;
       }
       setLastCreated({ token: res.link_token, url: res.url });
-      // Prepend a new link row to the local list (optimistic).
+      // Prepend a new link row to the local list. Use the REAL row
+      // id (not the token) so deactivate works correctly (A4-002).
       setLinks([
         {
-          id: res.link_token, // good enough as a key until next refresh
+          id: res.link_id,
           rep_id: repId,
           link_token: res.link_token,
           client_label: clientLabel.trim(),

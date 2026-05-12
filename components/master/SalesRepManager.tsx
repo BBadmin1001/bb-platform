@@ -9,10 +9,13 @@ import {
   Pencil,
   Trash2,
   ExternalLink,
+  Mail,
+  Loader2,
 } from "lucide-react";
 import {
   upsertSalesRep,
   deleteSalesRep,
+  inviteSalesRep,
 } from "@/app/master/sales-reps/actions";
 
 type Rep = {
@@ -96,6 +99,29 @@ export default function SalesRepManager({
     });
   }
 
+  const [inviting, setInviting] = useState<string | null>(null);
+  const [inviteMsg, setInviteMsg] = useState<string | null>(null);
+
+  function invite(r: Rep) {
+    if (!r.email) {
+      setError(`Add an email for ${r.full_name} first, then re-send the invite.`);
+      return;
+    }
+    setError(null);
+    setInviteMsg(null);
+    setInviting(r.id);
+    startTransition(async () => {
+      const res = await inviteSalesRep(r.id);
+      setInviting(null);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setInviteMsg(res.message);
+      setTimeout(() => setInviteMsg(null), 5000);
+    });
+  }
+
   async function copyLink(slug: string) {
     const url = trackedLink(masterHost, slug);
     try {
@@ -124,6 +150,25 @@ export default function SalesRepManager({
           <Plus size={13} className="mr-2" /> Add rep
         </button>
       </div>
+
+      {inviteMsg && (
+        <div
+          className="mb-4 p-3 rounded-md flex items-start gap-2 text-sm"
+          style={{
+            background: "color-mix(in srgb, var(--primary) 8%, var(--card))",
+            border:
+              "1px solid color-mix(in srgb, var(--primary) 22%, transparent)",
+            color: "var(--card-foreground)",
+          }}
+        >
+          <Check
+            size={14}
+            className="shrink-0 mt-0.5"
+            style={{ color: "var(--primary)" }}
+          />
+          <span>{inviteMsg}</span>
+        </div>
+      )}
 
       {editing && (
         <div className="admin-card p-5 mb-6">
@@ -339,6 +384,31 @@ export default function SalesRepManager({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => invite(r)}
+                    disabled={!r.email || inviting === r.id}
+                    className="text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded-md"
+                    style={{
+                      color: "var(--primary)",
+                      background:
+                        "color-mix(in srgb, var(--primary) 12%, transparent)",
+                      fontWeight: 600,
+                      opacity: r.email ? 1 : 0.5,
+                    }}
+                    title={
+                      r.email
+                        ? "Send Supabase invite email"
+                        : "Add an email first"
+                    }
+                  >
+                    {inviting === r.id ? (
+                      <Loader2 size={11} className="animate-spin" />
+                    ) : (
+                      <Mail size={11} />
+                    )}
+                    Invite
+                  </button>
                   <button
                     type="button"
                     onClick={() => edit(r)}

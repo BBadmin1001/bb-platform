@@ -135,7 +135,18 @@ export default function IntakeWizard({
     if (!saved) return;
     try {
       const parsed = JSON.parse(saved);
-      setData((prev) => ({ ...prev, ...parsed }));
+      setData((prev) => {
+        const merged = { ...prev, ...parsed };
+        // A4-007: don't let an empty draft email clobber a real
+        // prefill from the link token.
+        if (
+          prefillEmail &&
+          (!merged.email || !merged.email.trim())
+        ) {
+          merged.email = prefillEmail;
+        }
+        return merged;
+      });
       // Only show the pill when the saved blob has meaningful content
       // (avoid surfacing a banner on an empty draft).
       if (
