@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/master";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getCanonicalMasterHost } from "@/lib/tenant/resolver";
 import { SETUP_FEE_MIN_CENTS } from "@/lib/salesRepConstants";
 
 type Result = { ok: true; slug?: string } | { ok: false; error: string };
@@ -119,10 +120,7 @@ export async function inviteSalesRep(
   }
 
   const origin =
-    process.env.NEXT_PUBLIC_SITE_ORIGIN ||
-    (process.env.NEXT_PUBLIC_MASTER_HOSTNAME
-      ? `https://${process.env.NEXT_PUBLIC_MASTER_HOSTNAME}`
-      : "https://bb-platform-387.netlify.app");
+    process.env.NEXT_PUBLIC_SITE_ORIGIN || `https://${getCanonicalMasterHost()}`;
 
   // Supabase auth admin API — sends an invite email with a magic
   // link the rep clicks to set their password.
@@ -264,10 +262,7 @@ export async function createSalesRepLink(input: {
   // platform's configured master hostname; fall back to the Netlify
   // subdomain in dev / when unset.
   const origin =
-    process.env.NEXT_PUBLIC_SITE_ORIGIN ||
-    (process.env.NEXT_PUBLIC_MASTER_HOSTNAME
-      ? `https://${process.env.NEXT_PUBLIC_MASTER_HOSTNAME}`
-      : "https://bb-platform-387.netlify.app");
+    process.env.NEXT_PUBLIC_SITE_ORIGIN || `https://${getCanonicalMasterHost()}`;
   const url = `${origin}/get-started?link=${token}`;
 
   revalidatePath("/master/sales-reps");
@@ -380,10 +375,7 @@ export async function createMyClientLink(input: {
   }
 
   const origin =
-    process.env.NEXT_PUBLIC_SITE_ORIGIN ||
-    (process.env.NEXT_PUBLIC_MASTER_HOSTNAME
-      ? `https://${process.env.NEXT_PUBLIC_MASTER_HOSTNAME}`
-      : "https://bb-platform-387.netlify.app");
+    process.env.NEXT_PUBLIC_SITE_ORIGIN || `https://${getCanonicalMasterHost()}`;
 
   revalidatePath("/sales");
   return {

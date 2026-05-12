@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getCurrentTenantSlug } from "@/lib/tenant/context";
+import { getCanonicalMasterHost } from "@/lib/tenant/resolver";
 import { createPaymentLinkForQuote, isStripeConfigured } from "@/lib/stripe";
 import {
   sendIntakeReceived,
@@ -243,8 +244,7 @@ export async function submitIntakeWizard(
       try {
         const successUrl = new URL(
           "/onboarding/done",
-          process.env.NEXT_PUBLIC_SITE_URL ||
-            `https://${process.env.NEXT_PUBLIC_MASTER_HOSTNAME ?? "bb-platform-387.netlify.app"}`,
+          process.env.NEXT_PUBLIC_SITE_URL || `https://${getCanonicalMasterHost()}`,
         ).toString();
 
         const link = await createPaymentLinkForQuote({

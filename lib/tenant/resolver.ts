@@ -49,11 +49,42 @@ export type ResolveContext =
 // don't reliably surface non-public env vars at runtime, and this
 // resolver runs in the Edge proxy. Falls back to MASTER_HOSTNAME
 // (server-only) for local dev where the SSR runtime can read it.
-const MASTER_HOST = (
-  process.env.NEXT_PUBLIC_MASTER_HOSTNAME ??
-  process.env.MASTER_HOSTNAME ??
-  "master.localhost"
-).toLowerCase();
+//
+// Comma-separated values are supported so the master dashboard can be
+// reached on multiple hostnames (e.g. a branded URL like
+// `smartweb.brandbonjour.com` for ops + the platform's Netlify
+// default like `bb-platform-387.netlify.app` for backup / direct
+// access). Whitespace around commas is tolerated.
+const MASTER_HOSTS: ReadonlySet<string> = new Set(
+  (
+    process.env.NEXT_PUBLIC_MASTER_HOSTNAME ??
+    process.env.MASTER_HOSTNAME ??
+    "master.localhost"
+  )
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean),
+);
+/**
+ * Backwards-compat: callers that want a single "canonical" master
+ * hostname (e.g. log lines, redirect URLs) can pick the first one in
+ * the configured list. New code should prefer `MASTER_HOSTS.has(host)`.
+ */
+const MASTER_HOST = [...MASTER_HOSTS][0] ?? "master.localhost";
+
+/**
+ * The "canonical" master hostname for use in user-facing URLs (emails,
+ * shareable preview links, redirect targets). Picks the first entry
+ * of `MASTER_HOSTNAME` so callers always get a single hostname even
+ * when the env var is configured with multiple comma-separated values
+ * for host-check purposes.
+ *
+ * Use this instead of reading `process.env.MASTER_HOSTNAME` directly
+ * whenever you're going to interpolate the value into a URL.
+ */
+export function getCanonicalMasterHost(): string {
+  return MASTER_HOST;
+}
 const DEV_TENANT_SLUG = process.env.DEV_TENANT_SLUG ?? null;
 
 const TENANT_COLUMNS =
@@ -163,8 +194,10 @@ export async function resolveTenant(
     if (data) return { kind: "tenant", tenant: data as ResolvedTenant };
   }
 
-  // 1. Master dashboard.
-  if (host === MASTER_HOST) {
+  // 1. Master dashboard. Multiple hosts can be configured — any of
+  // them resolves to master so the platform owner can bookmark
+  // whichever URL they prefer (branded vs Netlify default).
+  if (MASTER_HOSTS.has(host)) {
     return { kind: "master" };
   }
 

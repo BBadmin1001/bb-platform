@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, Copy, Mail, ExternalLink } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/master";
+import { getCanonicalMasterHost } from "@/lib/tenant/resolver";
 import SalesRepManager from "@/components/master/SalesRepManager";
 import ClientLinkGenerator from "@/components/master/ClientLinkGenerator";
 
@@ -58,10 +59,7 @@ export default async function SalesRepsPage() {
     statsBySlug.set(slug, cur);
   }
 
-  const masterHost =
-    process.env.NEXT_PUBLIC_MASTER_HOSTNAME ||
-    process.env.MASTER_HOSTNAME ||
-    "bb-platform-387.netlify.app";
+  const masterHost = getCanonicalMasterHost();
 
   return (
     <div className="max-w-5xl mx-auto py-8">

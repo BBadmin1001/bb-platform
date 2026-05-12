@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/master";
 import { checkDomain, getPlatformTarget } from "@/lib/dns";
+import { getCanonicalMasterHost } from "@/lib/tenant/resolver";
 import {
   addNetlifyAlias,
   removeNetlifyAlias,
@@ -423,10 +424,7 @@ export async function setTenantLifecycleStage(
   // ── Notifications per stage transition ─────────────────────────
   // Best-effort — email failures don't roll back the stage change.
   if (tenant.contact_email) {
-    const masterHost =
-      process.env.NEXT_PUBLIC_MASTER_HOSTNAME ||
-      process.env.MASTER_HOSTNAME ||
-      "bb-platform-387.netlify.app";
+    const masterHost = getCanonicalMasterHost();
     if (stage === "ready_for_review") {
       const previewUrl = `https://${masterHost}/?tenant=${slug}&preview=${tenant.preview_token}`;
       void sendSiteReadyForReview({
@@ -498,10 +496,7 @@ export async function forceTenantLive(slug: string): Promise<Result> {
   if (error) return { ok: false, error: error.message };
 
   if (tenant.contact_email) {
-    const masterHost =
-      process.env.NEXT_PUBLIC_MASTER_HOSTNAME ||
-      process.env.MASTER_HOSTNAME ||
-      "bb-platform-387.netlify.app";
+    const masterHost = getCanonicalMasterHost();
     const liveUrl = tenant.custom_domain
       ? `https://${tenant.custom_domain}`
       : `https://${masterHost}/?tenant=${slug}`;

@@ -9,6 +9,7 @@ import LifecyclePanel from "@/components/master/LifecyclePanel";
 import AIPolishPanel from "@/components/master/AIPolishPanel";
 import CustomPagesPanel from "@/components/master/CustomPagesPanel";
 import { getPlatformTarget } from "@/lib/dns";
+import { getCanonicalMasterHost } from "@/lib/tenant/resolver";
 import {
   FEATURE_NAMES,
   tenantFeaturesIncludes,
@@ -160,11 +161,7 @@ export default async function TenantDetailPage({
         slug={tenant.slug}
         initialStage={(tenant.lifecycle_stage as LifecycleStage) ?? "intake"}
         initialPreviewToken={tenant.preview_token as string}
-        masterHost={
-          process.env.NEXT_PUBLIC_MASTER_HOSTNAME ||
-          process.env.MASTER_HOSTNAME ||
-          "bb-platform-387.netlify.app"
-        }
+        masterHost={getCanonicalMasterHost()}
       />
 
       {/* DOMAIN STATUS — first-class part of delivery, sits above
@@ -203,9 +200,7 @@ export default async function TenantDetailPage({
         tenantSlug={tenant.slug}
         tenantHost={
           (tenant.custom_domain as string | null) ||
-          (process.env.NEXT_PUBLIC_MASTER_HOSTNAME ||
-            "bb-platform-387.netlify.app") +
-            `?tenant=${tenant.slug}&preview=${tenant.preview_token}`
+          `${getCanonicalMasterHost()}?tenant=${tenant.slug}&preview=${tenant.preview_token}`
         }
         initialPages={(customPages ?? []) as Array<{
           id: string;

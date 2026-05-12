@@ -1,5 +1,6 @@
 import { requireSalesRep } from "@/lib/salesRepAuth";
 import { createServiceClient } from "@/lib/supabase/server";
+import { getCanonicalMasterHost } from "@/lib/tenant/resolver";
 import RepDashboard from "@/components/sales/RepDashboard";
 import RepHeader from "@/components/sales/RepHeader";
 
@@ -67,9 +68,7 @@ export default async function SalesDashboardPage({
     .maybeSingle();
   const commissionPct = Number(repWithCommission?.commission_pct ?? 0);
 
-  const masterHost =
-    process.env.NEXT_PUBLIC_MASTER_HOSTNAME ||
-    "bb-platform-387.netlify.app";
+  const masterHost = getCanonicalMasterHost();
 
   return (
     <main className="min-h-screen" style={{ background: "var(--background)", color: "var(--foreground)" }}>
