@@ -28,8 +28,7 @@ export default function Footer({
   const displayBrokerage = chrome.brokerage;
 
   // Hide marketing footer inside the admin panel + on standalone form
-  // pages. Open-house pages SHOW the footer on the web view; the
-  // @media print rules on /open-house/[slug] hide it during print.
+  // pages — those layouts own their own framing.
   if (
     pathname?.startsWith("/admin") ||
     pathname?.startsWith("/leave-review") ||

@@ -1073,7 +1073,7 @@ export type CustomPageInput = {
 const RESERVED_PAGE_SLUGS = new Set([
   "admin", "master", "api", "_next",
   "about", "buyers", "sellers", "communities", "closings", "contact",
-  "reviews", "partners", "path-to-ownership", "privacy", "open-house",
+  "reviews", "partners", "path-to-ownership", "privacy",
   "form", "leave-review", "leave-review-internal", "get-started",
   "onboarding", "p", "preview", "realtor-in", "sitemap.xml",
   "robots.txt", "favicon.ico",

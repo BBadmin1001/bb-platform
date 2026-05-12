@@ -9,7 +9,6 @@
  *   variant="stack"    → photo-rectangle stack that fans out (Media Library)
  *   variant="houses"   → 3 house silhouettes that grow tall (Communities)
  *   variant="checks"   → SOLD-tag stack with checkmarks ticking (Closings)
- *   variant="door"     → door panel swings open (Open Houses)
  *   variant="stars"    → 5 stars fill in sequentially (Reviews)
  *   variant="nodes"    → connected dots, lines draw in (Partners)
  *   variant="team"     → avatar circles arrange into a row (Team)
@@ -34,7 +33,6 @@ export type AdminCardVariant =
   | "stack"
   | "houses"
   | "checks"
-  | "door"
   | "stars"
   | "nodes"
   | "team"
@@ -265,41 +263,6 @@ function ChecksVisual({ accent }: VisualProps) {
           />
         </div>
       ))}
-    </div>
-  );
-}
-
-// ─────────────────────────── door (open houses) ────────────────
-function DoorVisual({ accent }: VisualProps) {
-  return (
-    <div className="absolute right-12 top-1/2 -translate-y-1/2 z-[3] [perspective:600px]">
-      <div className="relative h-[88px] w-[68px]">
-        {/* Doorway frame */}
-        <div
-          className="absolute inset-0 rounded-t-md border-2"
-          style={{
-            background: `color-mix(in srgb, ${accent} 18%, var(--card))`,
-            borderColor: `color-mix(in srgb, ${accent} 50%, transparent)`,
-          }}
-        />
-        {/* Door panel — swings open on hover via Y-axis rotation */}
-        <div
-          className={`absolute inset-y-1 left-1 right-1 origin-left rounded-sm transition-transform duration-700 ease-[${easing}] group-hover/animated-card:[transform:rotateY(-58deg)]`}
-          style={{
-            background: `linear-gradient(135deg, ${accent} 0%, color-mix(in srgb, ${accent} 60%, black) 100%)`,
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18)",
-          }}
-        >
-          {/* Knob */}
-          <div
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full"
-            style={{
-              background: "color-mix(in srgb, white 70%, transparent)",
-              boxShadow: "0 0 6px rgba(255,255,255,0.4)",
-            }}
-          />
-        </div>
-      </div>
     </div>
   );
 }
@@ -934,8 +897,6 @@ export function AdminCardVisual({
       return <HousesVisual accent={accent} />;
     case "checks":
       return <ChecksVisual accent={accent} />;
-    case "door":
-      return <DoorVisual accent={accent} />;
     case "stars":
       return <StarsVisual accent={accent} />;
     case "nodes":

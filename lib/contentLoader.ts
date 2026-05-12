@@ -521,7 +521,7 @@ async function resolveBrandImage(
   }
 }
 
-/** Brokerage logo — used on the open-house flyer header band etc. */
+/** Brokerage logo — used in the footer band etc. */
 export async function getBrokerLogo(): Promise<string> {
   return resolveBrandImage(
     "brokerLogo",

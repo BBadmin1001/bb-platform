@@ -280,7 +280,7 @@ export default function ClientLinkGenerator({
               className="admin-input"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Met at Saturday open house · wants flyers add-on"
+              placeholder="Met at the agent meet-up · wants analytics add-on"
             />
           </div>
         </div>

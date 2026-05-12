@@ -12,8 +12,8 @@
  *   The visual zone renders a `<AdminCardVisual variant={...} />`
  *   chosen by the parent — palette swatches for Brand Identity,
  *   stacked photos for Media Library, growing houses for Communities,
- *   ticking checkmarks for Closings, swinging door for Open Houses,
- *   filling stars for Reviews, network nodes for Partners, fanning
+ *   ticking checkmarks for Closings, filling stars for Reviews,
+ *   network nodes for Partners, fanning
  *   avatars for Team, drawing lines for Content. Each visual is its
  *   own component in `AdminCardVisuals.tsx`.
  *

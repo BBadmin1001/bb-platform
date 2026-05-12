@@ -74,7 +74,7 @@ const CARDS: CardConfig[] = [
     icon: Phone,
     title: "Contact & License",
     description:
-      "Phone, email, socials, state licenses, brokerage office. Flows into header, footer, contact page, flyers, and privacy.",
+      "Phone, email, socials, state licenses, brokerage office. Flows into header, footer, contact page, and privacy.",
     blockKey: "contact",
     accent: "#3a8b94",
     variant: "lines",
@@ -94,7 +94,7 @@ const CARDS: CardConfig[] = [
     icon: Building2,
     title: "Broker Image",
     description:
-      "Brokerage logo shown on the open-house flyer and anywhere the brokerage is identified.",
+      "Brokerage logo shown in the footer and anywhere the brokerage is identified.",
     blockKey: "brokerLogo",
     accent: "#1b5e20",
     variant: "tower",

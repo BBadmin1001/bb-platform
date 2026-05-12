@@ -88,7 +88,7 @@ export default function MediaUpgradeBanner({ usage }: { usage: UsageResult }) {
           <p className={`text-xs leading-relaxed ${urgent ? "text-red-800/85" : "text-amber-900/80"}`}>
             {urgent
               ? "Once the credits pool is exhausted, new photo uploads will fail until next month's reset or a plan upgrade. Bumping the plan now keeps everything live."
-              : "Plan upgrades unlock more storage, bandwidth, and transformations so you can keep adding listings, communities, and open-house photos without hitting a wall."}
+              : "Plan upgrades unlock more storage, bandwidth, and transformations so you can keep adding listings, communities, and closings photos without hitting a wall."}
           </p>
 
           <div className="flex flex-wrap items-center gap-3 mt-4">

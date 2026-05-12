@@ -453,7 +453,7 @@ export default function MasterIntakeForm({
         <Row>
           <PhotoField
             label="Brokerage logo"
-            blurb="Goes in the footer + open-house flyer header."
+            blurb="Goes in the footer + anywhere the brokerage is identified."
             value={v.brokerage_logo}
             onChange={(val) => set("brokerage_logo", val)}
             disabled={!cloudOk}

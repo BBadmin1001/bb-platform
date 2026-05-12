@@ -264,7 +264,7 @@ export const SECTIONS: SectionDef[] = [
     key: "contact",
     label: "Contact & License",
     description:
-      "Phone, email, social URLs, state licenses, and brokerage office address. These flow into the header, footer, contact page, privacy page, and the open-house flyer.",
+      "Phone, email, social URLs, state licenses, and brokerage office address. These flow into the header, footer, contact page, and privacy page.",
     shape: {
       phone: {
         type: "text",
@@ -326,7 +326,7 @@ export const SECTIONS: SectionDef[] = [
       office: {
         type: "object",
         label: "Brokerage Office",
-        help: "Optional — physical office address shown on flyers + privacy page. Leave blank to omit.",
+        help: "Optional — physical office address shown on the privacy page. Leave blank to omit.",
         shape: {
           name: {
             type: "text",
@@ -373,7 +373,7 @@ export const SECTIONS: SectionDef[] = [
     key: "brokerLogo",
     label: "Broker Image",
     description:
-      "Your brokerage logo — shown on the open-house flyer header band and anywhere the brokerage is identified. Transparent PNG looks cleanest on the navy band.",
+      "Your brokerage logo — shown in the footer band and anywhere the brokerage is identified. Transparent PNG looks cleanest on the navy band.",
     shape: {
       logo: {
         type: "image",

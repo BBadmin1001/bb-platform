@@ -13,7 +13,6 @@ import {
   Users,
   Briefcase,
   UsersRound,
-  DoorOpen,
   Palette,
   Plug,
   BarChart3,
@@ -85,17 +84,6 @@ const editorSections: Array<{
     accent: "#6d4c41",
     badge: "Sales",
     variant: "checks",
-  },
-  {
-    href: "/admin/open-houses",
-    icon: DoorOpen,
-    title: "Open Houses",
-    description:
-      "Build a landing page + printable A4 flyer for each open house. Auto-generates an RSVP form.",
-    accent: "#388e3c",
-    badge: "Listings",
-    variant: "door",
-    feature: "flyers",
   },
   {
     href: "/admin/reviews",

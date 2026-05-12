@@ -228,7 +228,7 @@ export default function PlanForm({ initial, editingId }: Props) {
                 addFeature();
               }
             }}
-            placeholder="flyers"
+            placeholder="analytics"
             className="admin-input admin-mono flex-1"
           />
           <button

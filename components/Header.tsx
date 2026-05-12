@@ -67,12 +67,8 @@ export default function Header({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // On standalone pages with a light background (open-house flyer renders
-  // on cream-soft right at the top), the transparent-header + white-text
-  // combo is invisible. Force a solid navy band there so the header is
-  // always readable.
-  const forceSolid = pathname?.startsWith("/open-house") ?? false;
   // light band → dark contents (only when scrolled on the marketing site)
+  const forceSolid = false;
   const useLight = !forceSolid && scrolled;
 
   const headerClass = forceSolid

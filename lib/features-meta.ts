@@ -10,7 +10,6 @@
 /** Feature names known to the platform. Add new ones here as plans
  *  introduce them so we get type safety throughout. */
 export const FEATURE_NAMES = [
-  "flyers",
   "google_reviews_widget",
   "seo_county_pages",
   "analytics",
@@ -22,12 +21,6 @@ export const FEATURE_META: Record<
   FeatureName,
   { label: string; planSlug: string; planLabel: string; price: string }
 > = {
-  flyers: {
-    label: "Open House flyers",
-    planSlug: "marketing",
-    planLabel: "Marketing Plan",
-    price: "$30/mo",
-  },
   google_reviews_widget: {
     label: "Google Reviews widget",
     planSlug: "marketing",
@@ -50,8 +43,8 @@ export const FEATURE_META: Record<
 
 /**
  * Test a tenant.features jsonb blob for a feature. Accepts both the
- * object form ({ flyers: true }) and the legacy array form
- * (["flyers"]) — older tenants seeded before the reconciler ran might
+ * object form ({ analytics: true }) and the legacy array form
+ * (["analytics"]) — older tenants seeded before the reconciler ran might
  * still have the array shape until next reconcile. Pure function, safe
  * in the client bundle.
  */
