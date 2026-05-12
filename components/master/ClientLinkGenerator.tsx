@@ -93,7 +93,7 @@ export default function ClientLinkGenerator({
       return;
     }
     if (!clientLabel.trim()) {
-      setError("Client label is required.");
+      setError("Realtor name is required.");
       return;
     }
 
@@ -248,19 +248,19 @@ export default function ClientLinkGenerator({
           </div>
           <div className="md:col-span-2">
             <label className="admin-label">
-              Client label (for your tracking)
+              Realtor name <span style={{ color: "var(--destructive)" }}>*</span>
             </label>
             <input
               type="text"
               className="admin-input"
               value={clientLabel}
               onChange={(e) => setClientLabel(e.target.value)}
-              placeholder="Jane Smith / Compass Atlanta"
+              placeholder="Jane Smith"
             />
           </div>
           <div className="md:col-span-2">
             <label className="admin-label">
-              Client email (optional · pre-fills the wizard)
+              Realtor email (optional · pre-fills the wizard)
             </label>
             <input
               type="email"

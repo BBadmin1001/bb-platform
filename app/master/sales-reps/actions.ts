@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/master";
+import { createClient } from "@/lib/supabase/server";
 import { SETUP_FEE_MIN_CENTS } from "@/lib/salesRepConstants";
 
 type Result = { ok: true; slug?: string } | { ok: false; error: string };
@@ -178,5 +179,138 @@ export async function setLinkActive(
     .eq("id", linkId);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/master/sales-reps");
+  return { ok: true };
+}
+
+/**
+ * Rep-scoped variant of createSalesRepLink. Used by /sales when a
+ * rep generates a link from their own dashboard. The rep_id is
+ * authoritative: the rep cannot create a link for any rep other
+ * than themselves. Master uses the original createSalesRepLink
+ * (which can target any rep_id).
+ */
+export async function createMyClientLink(input: {
+  realtor_name: string;
+  client_email?: string;
+  agreed_setup_cents: number;
+  notes?: string;
+}): Promise<
+  | { ok: true; link_token: string; url: string }
+  | { ok: false; error: string }
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // Resolve the rep row for this user.
+  const { data: rep } = await supabase
+    .from("sales_reps")
+    .select("id, is_active")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!rep) {
+    return {
+      ok: false,
+      error:
+        "Your account isn't linked to a sales rep yet. Ask the platform team.",
+    };
+  }
+  if (!rep.is_active) {
+    return { ok: false, error: "Your rep account is deactivated." };
+  }
+
+  // Reuse the master action's validation + token generation by
+  // calling it with the resolved rep_id. (Doing it inline so we can
+  // keep this server action call-stack clean.)
+  const realtor_name = input.realtor_name.trim();
+  if (!realtor_name) {
+    return { ok: false, error: "Realtor name is required." };
+  }
+  if (
+    !Number.isFinite(input.agreed_setup_cents) ||
+    input.agreed_setup_cents < SETUP_FEE_MIN_CENTS
+  ) {
+    return {
+      ok: false,
+      error: `Agreed price must be at least $${(SETUP_FEE_MIN_CENTS / 100).toFixed(0)}.`,
+    };
+  }
+
+  let token =
+    Math.random().toString(36).slice(2, 10) +
+    Math.random().toString(36).slice(2, 10);
+  const { data: existing } = await supabase
+    .from("sales_rep_links")
+    .select("id")
+    .eq("link_token", token)
+    .maybeSingle();
+  if (existing)
+    token =
+      Math.random().toString(36).slice(2, 10) +
+      Math.random().toString(36).slice(2, 10);
+
+  const { error } = await supabase.from("sales_rep_links").insert({
+    rep_id: rep.id,
+    link_token: token,
+    client_label: realtor_name,
+    client_email: input.client_email?.trim().toLowerCase() || null,
+    notes: input.notes?.trim() || null,
+    agreed_setup_cents: input.agreed_setup_cents,
+    created_by: user.id,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  const origin =
+    process.env.NEXT_PUBLIC_SITE_ORIGIN ||
+    (process.env.NEXT_PUBLIC_MASTER_HOSTNAME
+      ? `https://${process.env.NEXT_PUBLIC_MASTER_HOSTNAME}`
+      : "https://bb-platform-387.netlify.app");
+
+  revalidatePath("/sales");
+  return {
+    ok: true,
+    link_token: token,
+    url: `${origin}/get-started?link=${token}`,
+  };
+}
+
+/**
+ * Rep-scoped deactivate. Same as setLinkActive but only allows the
+ * rep to toggle their own links.
+ */
+export async function setMyLinkActive(
+  linkId: string,
+  isActive: boolean,
+): Promise<Result> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // Verify the link belongs to a rep this user owns.
+  const { data: link } = await supabase
+    .from("sales_rep_links")
+    .select("id, rep_id, sales_reps!inner(user_id)")
+    .eq("id", linkId)
+    .maybeSingle();
+  if (!link) return { ok: false, error: "Link not found." };
+  const rep = link.sales_reps as
+    | { user_id: string }
+    | { user_id: string }[]
+    | null;
+  const owner = Array.isArray(rep) ? rep[0]?.user_id : rep?.user_id;
+  if (owner !== user.id) {
+    return { ok: false, error: "This link isn't yours to change." };
+  }
+
+  const { error } = await supabase
+    .from("sales_rep_links")
+    .update({ is_active: isActive })
+    .eq("id", linkId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/sales");
   return { ok: true };
 }

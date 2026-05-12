@@ -136,6 +136,7 @@ export async function proxy(request: NextRequest) {
     "/api",
     "/get-started",
     "/onboarding",
+    "/sales",
   ];
   // A3-014: when the URL carries `?tenant=<slug>` AND the visitor is
   // a signed-in super-admin, allow them through to the public site

@@ -15,12 +15,21 @@ const STATUS_PILL: Record<string, { label: string; bg: string; fg: string }> = {
 
 export default async function ProspectsList() {
   const { supabase } = await requireSuperAdmin();
-  const { data: prospects } = await supabase
-    .from("prospects")
-    .select(
-      "id, business_name, contact_name, email, desired_domain, status, source, created_at, quoted_setup_fee_cents",
-    )
-    .order("created_at", { ascending: false });
+  const [{ data: prospects }, { data: reps }] = await Promise.all([
+    supabase
+      .from("prospects")
+      .select(
+        "id, business_name, contact_name, email, desired_domain, status, source, created_at, quoted_setup_fee_cents, sales_rep_ref",
+      )
+      .order("created_at", { ascending: false }),
+    supabase.from("sales_reps").select("slug, full_name"),
+  ]);
+  const repNameBySlug = new Map(
+    (reps ?? []).map((r) => [
+      (r.slug as string).toLowerCase(),
+      r.full_name as string,
+    ]),
+  );
 
   return (
     <div className="max-w-5xl mx-auto py-8">
@@ -66,6 +75,10 @@ export default async function ProspectsList() {
         <div className="space-y-2">
           {(prospects ?? []).map((p) => {
             const pill = STATUS_PILL[p.status] ?? STATUS_PILL.new;
+            const repSlug = (p.sales_rep_ref as string | null)?.toLowerCase();
+            const repName = repSlug
+              ? repNameBySlug.get(repSlug) ?? repSlug
+              : null;
             return (
               <Link
                 key={p.id}
@@ -118,6 +131,15 @@ export default async function ProspectsList() {
                     {p.email}
                     {p.desired_domain && (
                       <span> · {p.desired_domain}</span>
+                    )}
+                    {repName && (
+                      <span>
+                        {" "}
+                        · rep:{" "}
+                        <span style={{ color: "var(--primary)", fontWeight: 600 }}>
+                          {repName}
+                        </span>
+                      </span>
                     )}
                     {p.source && (
                       <span className="admin-mono"> · {p.source}</span>
