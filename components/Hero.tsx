@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import ShimmerText from "@/components/ShimmerText";
+import AutoFitHeading from "@/components/AutoFitHeading";
 import Counter from "@/components/Counter";
 import {
   getSection,
@@ -102,24 +103,19 @@ export default async function Hero() {
             {c.eyebrow}
           </p>
 
-          <h1
+          <AutoFitHeading
+            lines={c.titleLines}
             className="heading-display text-white animate-fade-in-up"
             style={{
-              fontSize: "clamp(2.5rem, 9vw, 6.5rem)",
               animationDelay: "0.4s",
               animationFillMode: "both",
-              lineHeight: 1.04,
             }}
-          >
-            <ShimmerText delay={1.2}>
-              {c.titleLines.map((line, i) => (
-                <span key={i}>
-                  {line}
-                  {i < c.titleLines.length - 1 && <br />}
-                </span>
-              ))}
-            </ShimmerText>
-          </h1>
+            maxRem={6.5}
+            minRem={2.25}
+            lineHeight={1.04}
+            Wrap={ShimmerText}
+            wrapProps={{ delay: 1.2 }}
+          />
 
           <div
             className="mt-9 md:mt-12 w-14 md:w-16 h-px bg-white/40 animate-fade-in"

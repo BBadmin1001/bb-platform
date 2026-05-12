@@ -6,6 +6,7 @@ import {
   resolveImageUrl,
 } from "@/lib/contentLoader";
 import ShimmerText from "@/components/ShimmerText";
+import AutoFitHeading from "@/components/AutoFitHeading";
 import DarkBreak from "@/components/DarkBreak";
 import { getCurrentTenant } from "@/lib/tenant/context";
 
@@ -99,19 +100,14 @@ export default async function AboutPage() {
 
         <div className="relative z-10 min-h-[90vh] flex flex-col items-center justify-center text-center px-6 pt-28 md:pt-32 pb-14 md:pb-16">
           <p className="eyebrow-light mb-10">{c.hero.eyebrow}</p>
-          <h1
+          <AutoFitHeading
+            lines={c.hero.titleLines}
             className="heading-display text-white"
-            style={{ fontSize: "clamp(2.5rem, 7vw, 5.5rem)", lineHeight: 1.04 }}
-          >
-            <ShimmerText>
-              {c.hero.titleLines.map((line, i) => (
-                <span key={i}>
-                  {line}
-                  {i < c.hero.titleLines.length - 1 && <br />}
-                </span>
-              ))}
-            </ShimmerText>
-          </h1>
+            maxRem={5.5}
+            minRem={2.25}
+            lineHeight={1.04}
+            Wrap={ShimmerText}
+          />
           <div className="mt-12 w-16 h-px bg-white/40" />
           <p className="mt-12 max-w-xl text-base md:text-lg font-light text-white/90 leading-[1.95] italic">
             {c.hero.subtitle}
