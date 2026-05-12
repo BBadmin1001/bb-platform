@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { resolveTenant } from "@/lib/tenant/resolver";
+import { resolveTenant, MASTER_HOSTS } from "@/lib/tenant/resolver";
 import {
   CONTEXT_HEADER,
   TENANT_ID_HEADER,
@@ -133,6 +133,33 @@ export async function proxy(request: NextRequest) {
     ctx = await resolveTenant(host, effectiveSearchParams);
   } catch {
     ctx = { kind: "unknown", hostname: host };
+  }
+
+  // ── Public visitors on master host with ?tenant=X → bounce to the
+  //    tenant's custom_domain. Without this redirect, the home page
+  //    renders fine via ?tenant= override, but the first nav click
+  //    hits master's "kind=master AND path not allowed → /master"
+  //    redirect because the relative nav link has no ?tenant= query.
+  //    Sending them to the actual custom domain is the only way to
+  //    make subsequent nav stay on the tenant.
+  //
+  //    Super admins keep the existing behavior — they sometimes need
+  //    to view-as-tenant from master without leaving the master URL.
+  if (
+    MASTER_HOSTS.has(host) &&
+    !isSuperAdmin &&
+    ctx.kind === "tenant" &&
+    ctx.tenant.custom_domain &&
+    ctx.tenant.custom_domain.toLowerCase() !== host
+  ) {
+    const target = new URL(url.toString());
+    target.host = ctx.tenant.custom_domain;
+    target.protocol = "https:";
+    target.port = "";
+    // Drop the ?tenant= param — the tenant is now resolved by host.
+    // Keep ?preview= so master-shared preview URLs work cross-domain.
+    target.searchParams.delete("tenant");
+    return NextResponse.redirect(target, 302);
   }
 
   // Stamp tenant headers on the resolved request (re-build because the

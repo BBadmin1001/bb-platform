@@ -55,7 +55,7 @@ export type ResolveContext =
 // `smartweb.brandbonjour.com` for ops + the platform's Netlify
 // default like `bb-platform-387.netlify.app` for backup / direct
 // access). Whitespace around commas is tolerated.
-const MASTER_HOSTS: ReadonlySet<string> = new Set(
+export const MASTER_HOSTS: ReadonlySet<string> = new Set(
   (
     process.env.NEXT_PUBLIC_MASTER_HOSTNAME ??
     process.env.MASTER_HOSTNAME ??
