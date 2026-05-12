@@ -116,12 +116,17 @@ export default async function TenantDetailPage({
       {(() => {
         const useCustomDomain =
           tenant.custom_domain && tenant.status === "active";
+        // "Visit site" stays as a direct URL — the public site doesn't
+        // need auth, so no magic-link round-trip is necessary.
         const siteHref = useCustomDomain
           ? `https://${tenant.custom_domain}/`
           : `/?tenant=${tenant.slug}&preview=${tenant.preview_token}`;
-        const adminHref = useCustomDomain
-          ? `https://${tenant.custom_domain}/admin`
-          : `/admin?tenant=${tenant.slug}&preview=${tenant.preview_token}`;
+        // "Open admin" routes through the SSO endpoint, which generates
+        // a single-use Supabase magic link as the super admin and 302s
+        // through it. The user lands on /admin already signed in,
+        // session correctly scoped to whichever host serves the tenant
+        // (custom domain or platform fallback).
+        const adminHref = `/master/tenants/${tenant.slug}/sso?dest=/admin`;
         return (
           <div className="flex flex-wrap gap-3 mb-10">
             <Link
