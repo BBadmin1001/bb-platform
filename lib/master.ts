@@ -33,8 +33,17 @@ export async function requireSuperAdmin() {
     .eq("user_id", user.id)
     .maybeSingle();
   if (!row) {
-    // Authed but not a super admin — they shouldn't loop back into
-    // master, so drop the `from` param.
+    // Authed but not a super admin. If they're a sales rep, send
+    // them to their own dashboard at /sales — otherwise back to the
+    // tenant admin shell. Either way, they never see /master.
+    const { data: repRow } = await supabase
+      .from("sales_reps")
+      .select("id")
+      .or(`user_id.eq.${user.id},email.eq.${user.email ?? ""}`)
+      .maybeSingle();
+    if (repRow) {
+      redirect("/sales");
+    }
     redirect("/admin");
   }
 
