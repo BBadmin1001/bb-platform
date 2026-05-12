@@ -1,35 +1,69 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Sparkles, Wand2, Check, AlertCircle, Loader2 } from "lucide-react";
-import { aiPolishMeet } from "@/app/master/tenants/actions";
+import {
+  Sparkles,
+  Wand2,
+  Check,
+  AlertCircle,
+  Loader2,
+  Globe,
+} from "lucide-react";
+import {
+  aiPolishMeet,
+  aiPolishWholeSite,
+  type AiPolishSiteResult,
+} from "@/app/master/tenants/actions";
 
 /**
- * Master-side panel that runs AI polish on a tenant's home.meet
- * section. Shows the resulting headline as a confirmation so master
- * can verify the result without leaving the page.
+ * Master-side AI Polish panel.
  *
- * Phase 13 starts with home.meet only — the single most visible
- * paragraph of bespoke copy on a tenant site. Once master is
- * comfortable with the output we can extend to hero / about / etc.
+ * Two flows:
+ *   1. "Polish whole site" — the primary CTA. One click, ~5-10s, every
+ *      public page on the tenant gets a polished pass from Claude
+ *      using the intake_data. Shows a per-page status grid.
+ *   2. "Polish Meet section only" — the original Phase 13 flow, kept
+ *      as a small secondary option for one-section retries.
+ *
+ * Operators stay on this page during the polish — server actions
+ * block until done, but ~10s is fine for a click-and-wait UX.
  */
 export default function AIPolishPanel({ slug }: { slug: string }) {
-  const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<string | null>(null);
+  const [pendingFull, startFullTransition] = useTransition();
+  const [pendingMeet, startMeetTransition] = useTransition();
+  const [siteResult, setSiteResult] = useState<AiPolishSiteResult | null>(null);
+  const [meetResult, setMeetResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function run() {
+  function runFull() {
     setError(null);
-    setResult(null);
-    startTransition(async () => {
+    setSiteResult(null);
+    setMeetResult(null);
+    startFullTransition(async () => {
+      const res = await aiPolishWholeSite(slug);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setSiteResult(res);
+    });
+  }
+
+  function runMeet() {
+    setError(null);
+    setSiteResult(null);
+    setMeetResult(null);
+    startMeetTransition(async () => {
       const res = await aiPolishMeet(slug);
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      setResult(res.preview ?? "(applied)");
+      setMeetResult(res.preview ?? "(applied)");
     });
   }
+
+  const anyPending = pendingFull || pendingMeet;
 
   return (
     <section className="admin-card p-6 mb-10">
@@ -52,38 +86,134 @@ export default function AIPolishPanel({ slug }: { slug: string }) {
       </div>
 
       <p
-        className="text-sm mb-4"
+        className="text-sm mb-5"
         style={{ color: "var(--muted-foreground)", lineHeight: 1.6 }}
       >
-        Click below to regenerate the home page&apos;s &ldquo;Meet
-        [Realtor]&rdquo; section using the customer&apos;s intake data
-        + house style rules. Replaces the current copy. You can always
-        re-edit by hand from{" "}
-        <code className="text-[11px]">/admin/content</code> on their
-        tenant.
+        Runs Claude over the customer&apos;s intake data and rewrites every
+        editable copy block on the public site (home, about, buyers,
+        sellers, path-to-ownership, partners, contact). The shape stays
+        the same — hrefs, image keys, step numbers, stats are untouched.
+        You can always re-edit by hand from{" "}
+        <code className="text-[11px]">/admin/content</code>.
       </p>
 
-      <button
-        type="button"
-        onClick={run}
-        disabled={pending}
-        className="admin-btn inline-flex items-center"
-        style={pending ? { opacity: 0.6 } : undefined}
-      >
-        {pending ? (
-          <>
-            <Loader2 size={13} className="mr-2 animate-spin" />
-            Polishing…
-          </>
-        ) : (
-          <>
-            <Sparkles size={13} className="mr-2" />
-            Polish &ldquo;Meet&rdquo; section
-          </>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={runFull}
+          disabled={anyPending}
+          className="admin-btn inline-flex items-center"
+          style={anyPending ? { opacity: 0.6 } : undefined}
+        >
+          {pendingFull ? (
+            <>
+              <Loader2 size={13} className="mr-2 animate-spin" />
+              Polishing every page&hellip;
+            </>
+          ) : (
+            <>
+              <Globe size={13} className="mr-2" />
+              Polish whole site
+            </>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={runMeet}
+          disabled={anyPending}
+          className="admin-btn admin-btn-secondary inline-flex items-center text-xs"
+          style={anyPending ? { opacity: 0.6 } : undefined}
+        >
+          {pendingMeet ? (
+            <>
+              <Loader2 size={11} className="mr-1.5 animate-spin" />
+              Polishing&hellip;
+            </>
+          ) : (
+            <>
+              <Sparkles size={11} className="mr-1.5" />
+              Just the &ldquo;Meet&rdquo; section
+            </>
+          )}
+        </button>
+        {pendingFull && (
+          <span
+            className="text-[11px]"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            7 pages in parallel — usually 5-10s.
+          </span>
         )}
-      </button>
+      </div>
 
-      {result && (
+      {/* Whole-site result */}
+      {siteResult && siteResult.ok && (
+        <div
+          className="mt-5 p-4 rounded-md"
+          style={{
+            background: "color-mix(in srgb, var(--primary) 6%, var(--card))",
+            border:
+              "1px solid color-mix(in srgb, var(--primary) 18%, transparent)",
+          }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Check size={14} style={{ color: "var(--primary)" }} />
+            <p
+              className="text-sm"
+              style={{ color: "var(--card-foreground)", fontWeight: 600 }}
+            >
+              Polished {siteResult.okCount} of {siteResult.okCount + siteResult.errCount} pages
+              {" · "}
+              <span style={{ color: "var(--muted-foreground)", fontWeight: 400 }}>
+                {(siteResult.ms / 1000).toFixed(1)}s
+              </span>
+            </p>
+          </div>
+          <ul className="space-y-1.5">
+            {siteResult.pages.map((p) => (
+              <li
+                key={p.page}
+                className="flex items-start gap-2 text-[12px]"
+                style={{ color: "var(--card-foreground)" }}
+              >
+                {p.ok ? (
+                  <Check
+                    size={12}
+                    className="shrink-0 mt-[2px]"
+                    style={{ color: "var(--primary)" }}
+                  />
+                ) : (
+                  <AlertCircle
+                    size={12}
+                    className="shrink-0 mt-[2px]"
+                    style={{ color: "var(--destructive)" }}
+                  />
+                )}
+                <span style={{ fontWeight: 600, minWidth: 70 }}>
+                  /{p.page === "home" ? "" : p.page}
+                </span>
+                {p.ok ? (
+                  <span style={{ color: "var(--muted-foreground)" }}>
+                    {p.sections} sections written
+                  </span>
+                ) : (
+                  <span style={{ color: "var(--destructive)" }}>{p.error}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p
+            className="mt-3 text-[11px]"
+            style={{ color: "var(--muted-foreground)", lineHeight: 1.5 }}
+          >
+            Polished copy is now in <code>content_blocks</code>. Visit the
+            site or open admin to review. Re-run anytime to regenerate.
+          </p>
+        </div>
+      )}
+
+      {/* Single-section ("Meet") result */}
+      {meetResult && (
         <div
           className="mt-4 p-3 rounded-md flex items-start gap-2 text-sm"
           style={{
@@ -99,7 +229,8 @@ export default function AIPolishPanel({ slug }: { slug: string }) {
             style={{ color: "var(--primary)" }}
           />
           <span style={{ color: "var(--card-foreground)" }}>
-            Applied. New heading: <em>&ldquo;{result}&rdquo;</em>
+            Meet section applied. New heading:{" "}
+            <em>&ldquo;{meetResult}&rdquo;</em>
           </span>
         </div>
       )}
@@ -108,7 +239,8 @@ export default function AIPolishPanel({ slug }: { slug: string }) {
         <div
           className="mt-4 p-3 rounded-md flex items-start gap-2 text-sm"
           style={{
-            background: "color-mix(in srgb, var(--destructive) 6%, transparent)",
+            background:
+              "color-mix(in srgb, var(--destructive) 6%, transparent)",
             border:
               "1px solid color-mix(in srgb, var(--destructive) 18%, transparent)",
             color: "var(--destructive)",

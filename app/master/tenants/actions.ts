@@ -14,7 +14,13 @@ import {
   sendDomainInstructions,
   sendSiteLive,
 } from "@/lib/email";
-import { polishMeetSection } from "@/lib/aiPolish";
+import {
+  polishMeetSection,
+  polishWholeSite,
+  POLISH_PAGES,
+  type PolishPage,
+} from "@/lib/aiPolish";
+import { content as DEFAULT_CONTENT } from "@/lib/content";
 import type { IntakeData } from "@/lib/intakeSchema";
 
 export type LifecycleStage =
@@ -605,6 +611,137 @@ export async function aiPolishMeet(
   // Return the polished heading so the UI can show a "applied: …"
   // confirmation without an extra round-trip.
   return { ok: true, slug, preview: polished.meet.heading };
+}
+
+/**
+ * Polish EVERY editable copy block on the tenant's public site in
+ * one pass. Pulls intake_data from the linked prospect, runs Claude
+ * on each page (home, about, buyers, sellers, path, partners,
+ * contact) in parallel, and writes every section as a content_blocks
+ * row keyed by (tenant_id, page, key). Existing blocks get overwritten.
+ *
+ * Returns a per-page summary so the UI can show which pages succeeded
+ * and which failed. One page failing doesn't block the others.
+ *
+ * Idempotent — re-running just rewrites the same rows. Safe to invoke
+ * multiple times during polishing if the operator wants another pass.
+ */
+export type AiPolishSiteResult =
+  | {
+      ok: true;
+      slug: string;
+      pages: Array<{
+        page: PolishPage;
+        ok: true;
+        sections: number;
+      } | {
+        page: PolishPage;
+        ok: false;
+        error: string;
+      }>;
+      ms: number;
+      okCount: number;
+      errCount: number;
+    }
+  | { ok: false; error: string };
+
+export async function aiPolishWholeSite(
+  slug: string,
+): Promise<AiPolishSiteResult> {
+  const { supabase } = await requireSuperAdmin();
+
+  // Resolve tenant + prospect → intake_data.
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id, prospect_id, realtor_name, brokerage")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!tenant) return { ok: false, error: "Tenant not found." };
+  if (!tenant.prospect_id) {
+    return {
+      ok: false,
+      error:
+        "This tenant wasn't created from a wizard intake — there's no source data to polish from.",
+    };
+  }
+
+  const { data: prospect } = await supabase
+    .from("prospects")
+    .select("intake_data")
+    .eq("id", tenant.prospect_id)
+    .maybeSingle();
+  const intake = (prospect?.intake_data ?? null) as IntakeData | null;
+  if (!intake) {
+    return {
+      ok: false,
+      error: "The linked prospect has no intake_data to polish from.",
+    };
+  }
+
+  // Fire all pages in parallel.
+  const result = await polishWholeSite(
+    intake,
+    DEFAULT_CONTENT as unknown as Record<string, unknown>,
+  );
+
+  // Write polished sections to content_blocks. Each page's polished
+  // object is a map of { sectionKey: sectionValue } — we upsert ONE
+  // row per section, matching how `getPageContent` reads them.
+  const now = new Date().toISOString();
+  const pages: Array<
+    | { page: PolishPage; ok: true; sections: number }
+    | { page: PolishPage; ok: false; error: string }
+  > = [];
+
+  for (const p of result.pages) {
+    if (!p.ok) {
+      pages.push({ page: p.page, ok: false, error: p.error });
+      continue;
+    }
+    const sectionKeys = Object.keys(p.content);
+    const rows = sectionKeys.map((key) => ({
+      tenant_id: tenant.id,
+      page: p.page,
+      key,
+      value: JSON.stringify((p.content as Record<string, unknown>)[key]),
+      updated_at: now,
+    }));
+    // Upsert in one round trip per page. RLS bypassed because
+    // requireSuperAdmin already issued a service-key-equivalent
+    // session (super_admins row grants is_super_admin = true).
+    const { error: upErr } = await supabase
+      .from("content_blocks")
+      .upsert(rows, { onConflict: "tenant_id,page,key" });
+    if (upErr) {
+      pages.push({
+        page: p.page,
+        ok: false,
+        error: `Polished OK, but writing to DB failed: ${upErr.message}`,
+      });
+    } else {
+      pages.push({ page: p.page, ok: true, sections: sectionKeys.length });
+    }
+  }
+
+  // Bust the cache on the tenant detail page so the next render shows
+  // the freshly-polished preview. Also bust the public pages so an
+  // operator viewing-as-tenant sees the new copy immediately.
+  revalidatePath(`/master/tenants/${slug}`);
+  // Best-effort: revalidate the public pages too. These run on the
+  // tenant's host, but Next's path cache is keyed on path alone.
+  for (const page of POLISH_PAGES) {
+    const path = page === "home" ? "/" : `/${page === "path" ? "path-to-ownership" : page}`;
+    revalidatePath(path);
+  }
+
+  return {
+    ok: true,
+    slug,
+    pages,
+    ms: result.ms,
+    okCount: pages.filter((p) => p.ok).length,
+    errCount: pages.filter((p) => !p.ok).length,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────
