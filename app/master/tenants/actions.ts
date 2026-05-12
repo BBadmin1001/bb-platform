@@ -650,32 +650,54 @@ export async function aiPolishWholeSite(
 ): Promise<AiPolishSiteResult> {
   const { supabase } = await requireSuperAdmin();
 
-  // Resolve tenant + prospect → intake_data.
+  // Resolve tenant + (optional) prospect → intake_data.
+  //
+  // We need an IntakeData to feed Claude. Two paths:
+  //   1. Tenant was created from the onboarding wizard (prospect_id
+  //      set + prospects.intake_data present) → use the rich intake.
+  //   2. Tenant was created by hand from master → synthesize a minimal
+  //      intake from the tenant row. Less personalized but the polish
+  //      still works for any tenant.
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id, prospect_id, realtor_name, brokerage")
+    .select(
+      "id, prospect_id, realtor_name, brokerage, state_abbr, contact_email, contact_phone",
+    )
     .eq("slug", slug)
     .maybeSingle();
   if (!tenant) return { ok: false, error: "Tenant not found." };
-  if (!tenant.prospect_id) {
-    return {
-      ok: false,
-      error:
-        "This tenant wasn't created from a wizard intake — there's no source data to polish from.",
-    };
-  }
 
-  const { data: prospect } = await supabase
-    .from("prospects")
-    .select("intake_data")
-    .eq("id", tenant.prospect_id)
-    .maybeSingle();
-  const intake = (prospect?.intake_data ?? null) as IntakeData | null;
+  let intake: IntakeData | null = null;
+  if (tenant.prospect_id) {
+    const { data: prospect } = await supabase
+      .from("prospects")
+      .select("intake_data")
+      .eq("id", tenant.prospect_id)
+      .maybeSingle();
+    intake = (prospect?.intake_data ?? null) as IntakeData | null;
+  }
   if (!intake) {
-    return {
-      ok: false,
-      error: "The linked prospect has no intake_data to polish from.",
-    };
+    // Synthesized intake — every required field set, optional ones
+    // empty. Claude has enough context for a generic polish; the
+    // result reads like a clean default site, not a fully bespoke one,
+    // but it's still better than the un-polished placeholder copy.
+    intake = {
+      contact_name: tenant.realtor_name ?? "",
+      email: tenant.contact_email ?? "",
+      phone: tenant.contact_phone ?? undefined,
+      realtor_full_name: tenant.realtor_name ?? "",
+      brokerage_name: tenant.brokerage ?? "",
+      licensed_states: tenant.state_abbr
+        ? [{ state_abbr: tenant.state_abbr }]
+        : [],
+    } as IntakeData;
+    if (!intake.realtor_full_name || !intake.brokerage_name) {
+      return {
+        ok: false,
+        error:
+          "This tenant has no intake data and no realtor name/brokerage on file — set those first, then re-run polish.",
+      };
+    }
   }
 
   // Fire all pages in parallel.
