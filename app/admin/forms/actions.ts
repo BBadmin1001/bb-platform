@@ -5,6 +5,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { extractCommon, type FormField } from "@/lib/forms";
 import { getCurrentTenantId } from "@/lib/tenant/context";
 import { sendLeadNotification } from "@/lib/email";
+import { getLeadWebhookConfig } from "@/lib/integrationStore";
 import { siteOrigin } from "@/lib/qrcode";
 
 type Result = { ok: true; id?: string; slug?: string } | { ok: false; error: string };
@@ -101,6 +102,46 @@ async function getTenantNotifyTarget(
 }
 
 /**
+ * Fire-and-forget CRM webhook. When the tenant has configured a
+ * lead_webhook integration (Follow Up Boss, kvCORE, Zapier, etc.),
+ * POST the lead payload there. Errors are logged but never block
+ * the form's success response.
+ */
+async function forwardLeadToCRM(
+  source: string,
+  data: Record<string, unknown>,
+  common: ReturnType<typeof extractCommon>,
+) {
+  try {
+    const config = await getLeadWebhookConfig();
+    if (!config) return;
+    const payload = {
+      source,
+      received_at: new Date().toISOString(),
+      name: common.name,
+      email: common.email,
+      phone: common.phone,
+      message: common.message,
+      raw: data,
+    };
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (config.apiKey) {
+      headers["X-API-Key"] = config.apiKey;
+      headers["Authorization"] = `Bearer ${config.apiKey}`;
+    }
+    await fetch(config.url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    console.error("[forms] forwardLeadToCRM failed", e);
+  }
+}
+
+/**
  * Fire-and-forget lead notification. Wraps `sendLeadNotification` so
  * the submit path doesn't have to inline the lookup + error swallow.
  * Email failure NEVER blocks the form's success response — the lead
@@ -192,6 +233,8 @@ export async function submitFormPublic(input: {
     common,
     formNotifyEmail,
   );
+  // Phase 31 — forward to CRM webhook if configured.
+  await forwardLeadToCRM(input.source, input.data, common);
 
   revalidatePath("/admin/inbox");
   return { ok: true };
@@ -230,6 +273,8 @@ export async function submitBuiltInForm(input: {
     input.data,
     common,
   );
+  // Phase 31 — forward to CRM webhook if configured.
+  await forwardLeadToCRM(input.source, input.data, common);
 
   revalidatePath("/admin/inbox");
   return { ok: true };

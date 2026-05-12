@@ -18,6 +18,8 @@ export async function upsertSalesRep(input: {
   email: string | null;
   is_active: boolean;
   notes: string | null;
+  /** 0–100 percent of agreed_setup_cents the rep earns per closed deal. */
+  commission_pct?: number;
 }): Promise<Result> {
   const { supabase } = await requireSuperAdmin();
 
@@ -32,6 +34,12 @@ export async function upsertSalesRep(input: {
   if (!input.full_name.trim()) {
     return { ok: false, error: "Full name is required." };
   }
+  // Server-side validation for commission_pct so a bad client can't
+  // push >100% or negative through.
+  const commission = input.commission_pct ?? 0;
+  if (!Number.isFinite(commission) || commission < 0 || commission > 100) {
+    return { ok: false, error: "Commission must be between 0% and 100%." };
+  }
 
   if (input.id) {
     const { error } = await supabase
@@ -42,6 +50,7 @@ export async function upsertSalesRep(input: {
         email: input.email?.trim().toLowerCase() || null,
         is_active: input.is_active,
         notes: input.notes?.trim() || null,
+        commission_pct: commission,
       })
       .eq("id", input.id);
     if (error) return { ok: false, error: error.message };
@@ -52,6 +61,7 @@ export async function upsertSalesRep(input: {
       email: input.email?.trim().toLowerCase() || null,
       is_active: input.is_active,
       notes: input.notes?.trim() || null,
+      commission_pct: commission,
     });
     if (error) return { ok: false, error: error.message };
   }

@@ -74,11 +74,12 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Growth",
     items: [
       {
+        // Built-in analytics are free for everyone (Phase 24);
+        // the GA4 integration *inside* the page is still gated.
         href: "/admin/analytics",
         label: "Analytics",
         icon: BarChart3,
         matchPrefix: true,
-        feature: "analytics",
       },
       {
         href: "/admin/seo",

@@ -15,6 +15,7 @@ import AdminShell from "@/components/admin/AdminShell";
 import { getAnalyticsIntegration } from "@/lib/integrationStore";
 import { tenantHasFeature } from "@/lib/features";
 import { UpgradeBanner } from "@/components/admin/UpgradeBanner";
+import BuiltinAnalytics from "@/components/admin/BuiltinAnalytics";
 
 /**
  * Website Analytics dashboard.
@@ -31,26 +32,9 @@ export default async function AnalyticsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
-  // Hard-gate: tenants without the `analytics` feature unlocked see
-  // only the upgrade banner — the GA setup controls are hidden until
-  // they're on the Visibility plan. The banner explains how to unlock.
+  // Built-in pageview analytics are always available (Phase 24).
+  // The GA4 integration + advanced Data API embeds stay feature-gated.
   const hasAnalytics = await tenantHasFeature("analytics");
-  if (!hasAnalytics) {
-    return (
-      <AdminShell user={{ email: user.email ?? "" }}>
-        <div className="max-w-5xl mx-auto py-8">
-          <Link
-            href="/admin"
-            className="inline-flex items-center gap-1.5 text-xs mb-6"
-            style={{ color: "var(--muted-foreground)" }}
-          >
-            <ArrowLeft size={14} /> Back to Site Editor
-          </Link>
-          <UpgradeBanner feature="analytics" />
-        </div>
-      </AdminShell>
-    );
-  }
 
   const integration = await getAnalyticsIntegration();
   const isConnected = Boolean(integration?.enabled && integration.config?.measurementId);
@@ -88,11 +72,29 @@ export default async function AnalyticsPage() {
           style={{ color: "var(--muted-foreground)" }}
         >
           See how visitors find and use the site — page views, traffic
-          sources, popular pages, conversions. Powered by Google Analytics 4.
+          sources, popular pages, conversions.
         </p>
 
-        {/* ── Connection status ─────────────────────────────────── */}
-        {isConnected ? (
+        {/* Built-in pageview analytics (Phase 24) — free for every
+            tenant. Privacy-respecting, no cookies, no IPs stored. */}
+        <BuiltinAnalytics />
+
+        {/* Google Analytics 4 — feature-gated upgrade for advanced
+            reports (audience, conversion funnels, attribution). */}
+        {!hasAnalytics ? (
+          <>
+            <h2
+              className="text-base mt-4 mb-3"
+              style={{
+                color: "var(--card-foreground)",
+                fontWeight: 600,
+              }}
+            >
+              Want more — sessions, audiences, conversions?
+            </h2>
+            <UpgradeBanner feature="analytics" />
+          </>
+        ) : isConnected ? (
           <div
             className="admin-card p-5 mb-8 flex flex-wrap items-center justify-between gap-4"
             style={{

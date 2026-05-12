@@ -25,6 +25,7 @@ type Rep = {
   email: string | null;
   is_active: boolean;
   notes: string | null;
+  commission_pct?: number;
 };
 
 type Stats = { total: number; paid: number; revenueCents: number };
@@ -51,6 +52,7 @@ export default function SalesRepManager({
       email: "",
       is_active: true,
       notes: "",
+      commission_pct: 0,
     });
     setError(null);
   }
@@ -76,6 +78,7 @@ export default function SalesRepManager({
         email: (editing.email ?? "")?.trim() || null,
         is_active: editing.is_active ?? true,
         notes: (editing.notes ?? "")?.trim() || null,
+        commission_pct: Number(editing.commission_pct ?? 0),
       });
       if (!res.ok) {
         setError(res.error);
@@ -237,6 +240,30 @@ export default function SalesRepManager({
                 Active
               </label>
             </div>
+            <div>
+              <label className="admin-label">Commission (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                className="admin-input"
+                value={editing.commission_pct ?? 0}
+                onChange={(e) =>
+                  setEditing({
+                    ...editing,
+                    commission_pct: Number(e.target.value),
+                  })
+                }
+                placeholder="e.g. 15"
+              />
+              <p
+                className="mt-1 text-[10px]"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                What this rep earns on each closed deal. 0% means salaried / no commission.
+              </p>
+            </div>
             <div className="sm:col-span-2">
               <label className="admin-label">Notes (optional)</label>
               <textarea
@@ -347,12 +374,19 @@ export default function SalesRepManager({
                     </p>
                   )}
 
-                  <div className="grid grid-cols-3 gap-3 mt-3 max-w-md">
+                  <div className="grid grid-cols-4 gap-3 mt-3 max-w-md">
                     <Stat label="Prospects" value={s.total} />
                     <Stat label="Paid" value={s.paid} />
                     <Stat
                       label="Revenue"
                       value={`$${(s.revenueCents / 100).toFixed(0)}`}
+                    />
+                    <Stat
+                      label={`Commission (${(r.commission_pct ?? 0).toFixed(0)}%)`}
+                      value={`$${(
+                        ((r.commission_pct ?? 0) / 100) *
+                        (s.revenueCents / 100)
+                      ).toFixed(0)}`}
                     />
                   </div>
 

@@ -68,11 +68,15 @@ function isOpen(status: string) {
 
 export default function RepDashboard({
   rep,
+  commissionPct,
   links: initialLinks,
   prospects,
   masterHost,
 }: {
   rep: { id: string; slug: string; full_name: string };
+  /** Percent (0-100) of revenue the rep earns. Master configures from
+   *  /master/sales-reps; rep can't change it themselves. */
+  commissionPct: number;
   links: LinkRow[];
   prospects: Prospect[];
   masterHost: string;
@@ -144,13 +148,14 @@ export default function RepDashboard({
 
   return (
     <div className="space-y-10">
-      {/* Stat cards */}
+      {/* Stat cards — show COMMISSION (rep's earnings) instead of raw
+          revenue. Rate is set per-rep by master from /master/sales-reps. */}
       <section>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
             icon={DollarSign}
-            label="Pipeline revenue"
-            value={`$${(stats.pipelineCents / 100).toFixed(0)}`}
+            label={`Pipeline commission (${commissionPct.toFixed(0)}%)`}
+            value={`$${((stats.pipelineCents * commissionPct) / 100 / 100).toFixed(0)}`}
             hint={`${stats.pipelineCount} open ${stats.pipelineCount === 1 ? "deal" : "deals"}`}
             color="var(--primary)"
           />
@@ -162,9 +167,9 @@ export default function RepDashboard({
           />
           <StatCard
             icon={CheckCircle2}
-            label="Closed this month"
-            value={`$${(stats.closedThisMonthCents / 100).toFixed(0)}`}
-            hint={`${stats.closedThisMonthCount} deals`}
+            label="Commission this month"
+            value={`$${((stats.closedThisMonthCents * commissionPct) / 100 / 100).toFixed(0)}`}
+            hint={`${stats.closedThisMonthCount} ${stats.closedThisMonthCount === 1 ? "deal" : "deals"}`}
             color="var(--primary)"
           />
           <StatCard
@@ -176,6 +181,15 @@ export default function RepDashboard({
             hint="All time"
           />
         </div>
+        {commissionPct === 0 && (
+          <p
+            className="mt-3 text-[11px]"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            Commission rate is 0% — ask master to set it from{" "}
+            <code>/master/sales-reps</code>.
+          </p>
+        )}
       </section>
 
       {/* Last-6-months strip */}
@@ -218,7 +232,7 @@ export default function RepDashboard({
                 className="text-[10px]"
                 style={{ color: "var(--muted-foreground)" }}
               >
-                ${(m.cents / 100).toFixed(0)}
+                ${((m.cents * commissionPct) / 100 / 100).toFixed(0)}
               </p>
             </div>
           ))}

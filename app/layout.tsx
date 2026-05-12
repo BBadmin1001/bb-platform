@@ -5,6 +5,7 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BrandThemeStyle from "@/components/BrandThemeStyle";
+import TrackPageview from "@/components/TrackPageview";
 import { getPortrait, getFeaturedImage, getServiceClient } from "@/lib/contentLoader";
 import { getAnalyticsMeasurementId } from "@/lib/integrationStore";
 import { siteOrigin } from "@/lib/qrcode";
@@ -149,6 +150,10 @@ export default async function RootLayout({
 
         {/* Per-tenant brand theme — overrides --brand-* CSS variables. */}
         <BrandThemeStyle />
+        {/* Built-in pageview tracker — fires once per route change on
+            public tenant pages. Mirrors hideShell logic so admin /
+            master / sales pages don't pollute the analytics. */}
+        {!hideShell && <TrackPageview />}
         {!hideShell && (
           <Header
             portraitAvatar={portrait.avatar}

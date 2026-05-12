@@ -1,11 +1,14 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getCurrentTenantId } from "@/lib/tenant/context";
 import AdminShell from "@/components/admin/AdminShell";
 import TeamManager, {
   type TeamRow,
 } from "@/components/admin/team/TeamManager";
+
+export const dynamic = "force-dynamic";
 
 export default async function TeamAdminPage() {
   const supabase = await createClient();
@@ -14,20 +17,50 @@ export default async function TeamAdminPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
-  // Pull caller's role + the full team
-  const [{ data: me }, { data: team }] = await Promise.all([
-    supabase
-      .from("team_members")
-      .select("role")
-      .eq("id", user.id)
-      .single(),
-    supabase
-      .from("team_members")
-      .select("id, email, display_name, role, created_at")
-      .order("created_at", { ascending: true }),
-  ]);
+  const tenantId = await getCurrentTenantId();
+  if (!tenantId) redirect("/admin");
 
-  const isOwner = me?.role === "owner";
+  // Determine the caller's role on this tenant. Super-admins can do
+  // anything; otherwise we look up their tenant_users entry.
+  const svc = createServiceClient();
+  const { data: superRow } = await svc
+    .from("super_admins")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const isSuper = !!superRow;
+  const { data: me } = await svc
+    .from("tenant_users")
+    .select("role")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const isOwner = isSuper || me?.role === "owner";
+
+  // Pull every team member on THIS tenant.
+  const { data: teamRaw } = await svc
+    .from("tenant_users")
+    .select("user_id, role, created_at")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: true });
+
+  // We need the email + display name for each member — auth.users
+  // isn't accessible via RLS, so use the admin API to join in JS.
+  const { data: usersListed } = await svc.auth.admin.listUsers();
+  const usersById = new Map(
+    (usersListed?.users ?? []).map((u) => [u.id, u]),
+  );
+  const team = (teamRaw ?? []).map((row) => {
+    const u = usersById.get(row.user_id as string);
+    return {
+      id: row.user_id as string,
+      email: u?.email ?? "(unknown)",
+      display_name:
+        (u?.user_metadata?.full_name as string | undefined) ?? null,
+      role: row.role as "owner" | "editor",
+      created_at: row.created_at as string,
+    };
+  });
 
   return (
     <AdminShell user={{ email: user.email ?? "" }}>
@@ -57,7 +90,7 @@ export default async function TeamAdminPage() {
         </p>
 
         <TeamManager
-          members={(team ?? []) as TeamRow[]}
+          members={team as TeamRow[]}
           currentUserId={user.id}
           isOwner={!!isOwner}
         />

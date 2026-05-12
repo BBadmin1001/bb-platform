@@ -140,11 +140,13 @@ const editorSections: Array<{
     icon: BarChart3,
     title: "Website Analytics",
     description:
-      "See traffic, page views, and where visitors come from. Powered by Google Analytics 4 — paste your Measurement ID once and we install the tag everywhere.",
+      "See traffic, page views, top pages, and referrers — last 30 days. Free, privacy-respecting, no setup. Upgrade for full Google Analytics 4 reports.",
     accent: "#388e3c",
     badge: "Insights",
     variant: "chart",
-    feature: "analytics",
+    // Analytics dashboard is free; the GA4 integration inside it is
+    // still gated by `feature: "analytics"` but the card itself
+    // always opens.
   },
   {
     href: "/admin/seo",

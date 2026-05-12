@@ -23,7 +23,9 @@ export default async function SalesRepsPage() {
     await Promise.all([
       supabase
         .from("sales_reps")
-        .select("id, slug, full_name, email, is_active, notes, created_at")
+        .select(
+          "id, slug, full_name, email, is_active, notes, created_at, commission_pct",
+        )
         .order("created_at", { ascending: false }),
       supabase
         .from("prospects")
@@ -117,6 +119,7 @@ export default async function SalesRepsPage() {
           email: string | null;
           is_active: boolean;
           notes: string | null;
+          commission_pct: number;
         }>}
         statsBySlug={Object.fromEntries(statsBySlug)}
         masterHost={masterHost}

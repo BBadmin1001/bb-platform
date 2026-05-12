@@ -58,6 +58,15 @@ export default async function SalesDashboardPage({
         : Promise.resolve({ data: [] as { id: string; slug: string; full_name: string; is_active: boolean }[] }),
     ]);
 
+  // Refetch the rep's commission_pct so the dashboard math is fresh
+  // when master updates it from /master/sales-reps.
+  const { data: repWithCommission } = await svc
+    .from("sales_reps")
+    .select("commission_pct")
+    .eq("id", auth.rep.id)
+    .maybeSingle();
+  const commissionPct = Number(repWithCommission?.commission_pct ?? 0);
+
   const masterHost =
     process.env.NEXT_PUBLIC_MASTER_HOSTNAME ||
     "bb-platform-387.netlify.app";
@@ -77,6 +86,7 @@ export default async function SalesDashboardPage({
       <div className="max-w-6xl mx-auto px-6 py-10">
         <RepDashboard
           rep={auth.rep}
+          commissionPct={commissionPct}
           links={(links ?? []) as Array<{
             id: string;
             link_token: string;

@@ -13,6 +13,7 @@ import {
 import { getCommunities } from "@/lib/communitiesLoader";
 import { getPageContent, getSection, resolveImageUrl } from "@/lib/contentLoader";
 import ShimmerText from "@/components/ShimmerText";
+import MortgageCalculator from "@/components/MortgageCalculator";
 import DarkBreak from "@/components/DarkBreak";
 import ProcessTimeline from "@/components/ProcessTimeline";
 import { getCurrentTenant } from "@/lib/tenant/context";
@@ -276,6 +277,15 @@ export default async function BuyersPage() {
               </p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Mortgage calculator — Phase 20. Numbers are illustrative only;
+          a disclaimer inside the component reminds visitors to get a
+          real quote from a licensed loan officer. */}
+      <section className="section-y gutter-x" style={{ background: "#FAFAFA" }}>
+        <div className="max-w-5xl mx-auto">
+          <MortgageCalculator />
         </div>
       </section>
 

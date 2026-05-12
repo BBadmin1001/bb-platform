@@ -22,7 +22,11 @@ import { getCurrentTenantId } from "./tenant/context";
 
 // ─────────────────────────── Types ──────────────────────────────
 
-export type IntegrationKey = "google_places" | "google_analytics";
+export type IntegrationKey =
+  | "google_places"
+  | "google_analytics"
+  | "calendly"
+  | "lead_webhook";
 
 export interface GooglePlacesConfig {
   apiKey: string;
@@ -120,4 +124,63 @@ export async function getAnalyticsMeasurementId(): Promise<string | null> {
   const id = row.config?.measurementId?.trim() ?? "";
   if (!id || !/^G-[A-Z0-9]+$/.test(id)) return null;
   return id;
+}
+
+// ─────────────────────────── Calendly (Phase 31) ───────────────────
+
+export interface CalendlyConfig {
+  /** Full Calendly scheduling URL, e.g. https://calendly.com/jane-realtor/30min */
+  url: string;
+}
+
+export async function getCalendlyIntegration() {
+  return getIntegration<CalendlyConfig>("calendly");
+}
+
+/** Returns the Calendly URL if connected + enabled, else null. */
+export async function getCalendlyUrl(): Promise<string | null> {
+  const row = await getCalendlyIntegration();
+  if (!row?.enabled) return null;
+  const url = row.config?.url?.trim() ?? "";
+  if (!url || !/^https?:\/\//.test(url)) return null;
+  return url;
+}
+
+// ─────────────────────── CRM lead webhook (Phase 31) ─────────────
+
+/**
+ * Generic outbound webhook for CRMs like Follow Up Boss, kvCORE,
+ * HubSpot, Zapier, n8n. When a public form submission lands in
+ * `leads`, the lead is also POSTed to this URL as JSON. The realtor
+ * configures the URL and a header value once.
+ */
+export interface LeadWebhookConfig {
+  /** Where to POST the lead payload. */
+  url: string;
+  /** Optional value for the X-API-Key header (Follow Up Boss style). */
+  apiKey?: string;
+  /** Short human label for the master + admin UI ("Follow Up Boss",
+   *  "kvCORE", "Zapier Catch Hook", etc.). */
+  label?: string;
+}
+
+export async function getLeadWebhook() {
+  return getIntegration<LeadWebhookConfig>("lead_webhook");
+}
+
+/** Returns the configured webhook URL + headers, or null if not set. */
+export async function getLeadWebhookConfig(): Promise<{
+  url: string;
+  apiKey?: string;
+  label?: string;
+} | null> {
+  const row = await getLeadWebhook();
+  if (!row?.enabled) return null;
+  const url = row.config?.url?.trim() ?? "";
+  if (!url || !/^https?:\/\//.test(url)) return null;
+  return {
+    url,
+    apiKey: row.config?.apiKey?.trim() || undefined,
+    label: row.config?.label?.trim() || undefined,
+  };
 }

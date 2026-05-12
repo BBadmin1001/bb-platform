@@ -4,6 +4,7 @@ import ContactForm from "@/components/ContactForm";
 import { getPageContent, resolveImageUrl } from "@/lib/contentLoader";
 import { getTenantChrome } from "@/lib/tenant/chrome";
 import { getCurrentTenant } from "@/lib/tenant/context";
+import { getCalendlyUrl } from "@/lib/integrationStore";
 
 export async function generateMetadata() {
   const tenant = await getCurrentTenant();
@@ -36,9 +37,10 @@ type ContactContent = {
 };
 
 export default async function ContactPage() {
-  const [c, chrome] = await Promise.all([
+  const [c, chrome, calendlyUrl] = await Promise.all([
     getPageContent<ContactContent>("contact"),
     getTenantChrome(),
+    getCalendlyUrl(),
   ]);
   const heroBg = await resolveImageUrl(c.hero.backgroundImage, {
     fallback:
@@ -97,6 +99,30 @@ export default async function ContactPage() {
             <div className="mb-12 w-12 h-px bg-navy/40" />
 
             <ContactForm realtorName={chrome.name} />
+
+            {/* Phase 31 — embed Calendly inline below the form when
+                the tenant has connected it. Visitors can pick a slot
+                without leaving the page. */}
+            {calendlyUrl && (
+              <div className="mt-14">
+                <p className="eyebrow mb-3">Or book a time directly</p>
+                <div
+                  style={{
+                    border: "1px solid rgba(20,40,64,0.12)",
+                    borderRadius: 6,
+                    overflow: "hidden",
+                    background: "#fff",
+                  }}
+                >
+                  <iframe
+                    src={`${calendlyUrl}?embed_type=Inline&hide_event_type_details=0&hide_gdpr_banner=1`}
+                    style={{ width: "100%", height: 720, border: 0 }}
+                    title="Schedule a meeting"
+                    loading="lazy"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Direct details */}
