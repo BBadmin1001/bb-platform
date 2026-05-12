@@ -151,19 +151,81 @@ export async function getCurrentTenantId(): Promise<string | null> {
   const fromHeader = h.get(TENANT_ID_HEADER);
   if (fromHeader) return fromHeader;
   // Fallback chain: explicit ?tenant= on the request URL → sticky
-  // cookie → null. Both code paths require a DB lookup to resolve the
-  // slug to a tenant id (cached for the request lifetime).
+  // cookie → host-based custom_domain lookup → null. The host fallback
+  // exists because Netlify's Edge → Node SSR bridge silently strips
+  // custom request headers like `x-bb-tenant-id` even though the proxy
+  // sets them correctly. Without this, anon visitors to a tenant's
+  // custom domain get the no-tenant fallback page.
   const slug =
     (await readTenantSlugFromUrl()) || (await readTenantCookieSlug());
-  if (!slug) return null;
-  return resolveSlugToTenantId(slug);
+  if (slug) return resolveSlugToTenantId(slug);
+  return resolveCustomDomainTenantId();
 }
 
 export async function getCurrentTenantSlug(): Promise<string | null> {
   const h = await headers();
   const fromHeader = h.get(TENANT_SLUG_HEADER);
   if (fromHeader) return fromHeader;
-  return (await readTenantSlugFromUrl()) || (await readTenantCookieSlug());
+  const slug =
+    (await readTenantSlugFromUrl()) || (await readTenantCookieSlug());
+  if (slug) return slug;
+  return resolveCustomDomainTenantSlug();
+}
+
+/**
+ * Lazy cache of host → tenant id for the lifetime of the Node runtime.
+ * Same key shape as `_slugIdCache`: hostnames are public + stable, so
+ * caching across requests is safe.
+ */
+const _hostTenantCache = new Map<string, { id: string; slug: string }>();
+
+/**
+ * Read the request's Host header (or X-Forwarded-Host as a defense), and
+ * if it matches a tenant.custom_domain row, return that tenant's id.
+ * Mirrors the logic in `lib/tenant/resolver.ts` but for the SSR layer
+ * (since the proxy's stamped headers don't always survive on Netlify).
+ */
+async function resolveCustomDomainTenantId(): Promise<string | null> {
+  const row = await resolveCustomDomainTenant();
+  return row?.id ?? null;
+}
+
+async function resolveCustomDomainTenantSlug(): Promise<string | null> {
+  const row = await resolveCustomDomainTenant();
+  return row?.slug ?? null;
+}
+
+async function resolveCustomDomainTenant(): Promise<{
+  id: string;
+  slug: string;
+} | null> {
+  try {
+    const h = await headers();
+    const rawHost =
+      h.get("x-forwarded-host") ?? h.get("host") ?? "";
+    const host = rawHost.toLowerCase().split(":")[0]?.trim() ?? "";
+    if (!host) return null;
+    if (_hostTenantCache.has(host)) {
+      return _hostTenantCache.get(host) ?? null;
+    }
+    // Lazy import to avoid a circular module-init cycle with
+    // lib/contentLoader.ts (which imports from this file).
+    const { getServiceClient } = await import("@/lib/contentLoader");
+    const supabase = getServiceClient();
+    if (!supabase) return null;
+    const { data } = await supabase
+      .from("tenants")
+      .select("id, slug")
+      .eq("custom_domain", host)
+      .eq("status", "active")
+      .maybeSingle();
+    if (!data?.id || !data?.slug) return null;
+    const row = { id: data.id as string, slug: data.slug as string };
+    _hostTenantCache.set(host, row);
+    return row;
+  } catch {
+    return null;
+  }
 }
 
 /**

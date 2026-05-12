@@ -2,10 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowRight, MapPin, Star, Phone, Mail } from "lucide-react";
-import {
-  getCountyLanding,
-  getPublishedCountySlugs,
-} from "@/lib/countyLandingLoader";
+import { getCountyLanding } from "@/lib/countyLandingLoader";
 import { getBrand, getPortrait } from "@/lib/contentLoader";
 import { getReviews } from "@/lib/reviewsLoader";
 import { getTenantChrome } from "@/lib/tenant/chrome";
@@ -34,13 +31,23 @@ import PillarCards from "@/components/PillarCards";
  * revalidation so admin edits show up shortly after save.
  */
 
-export const dynamic = "force-static";
-export const revalidate = 60;
-
-export async function generateStaticParams() {
-  const slugs = await getPublishedCountySlugs();
-  return slugs.map((slug) => ({ slug }));
-}
+// Multi-tenant safety: this page renders TENANT-scoped data
+// (`getCurrentTenant`, `getBrand`, `getReviews`, `getTenantChrome`),
+// so it MUST NOT be statically cached. If we marked it `force-static`,
+// whichever tenant's request fills the cache first would have its
+// branding/reviews/portrait served to every other tenant for the next
+// `revalidate` window — a P0 cross-tenant data leak.
+//
+// We still want SEO speed for county landing pages — that's handled at
+// the edge (Netlify Durable Cache keys per Host header), not via the
+// Next.js static cache. Each request resolves the tenant via cookies/
+// headers (set by proxy.ts) and renders that tenant's data.
+//
+// `generateStaticParams` is also dropped on purpose. Pre-rendering at
+// build time has no tenant context, so it would either error or bake
+// in fallbacks for every slug — neither useful, both confusing.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function generateMetadata({
   params,

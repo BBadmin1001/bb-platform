@@ -124,7 +124,16 @@ export async function proxy(request: NextRequest) {
     effectiveSearchParams.set("tenant", cookieTenant);
   }
 
-  const ctx = await resolveTenant(host, effectiveSearchParams);
+  // Resolve tenant, but catch failures defensively so a downstream
+  // Supabase outage doesn't take the whole proxy down — we'd rather
+  // fall through to the "unknown" path (which lets the SSR layer
+  // re-resolve via host header) than 500.
+  let ctx: Awaited<ReturnType<typeof resolveTenant>>;
+  try {
+    ctx = await resolveTenant(host, effectiveSearchParams);
+  } catch {
+    ctx = { kind: "unknown", hostname: host };
+  }
 
   // Stamp tenant headers on the resolved request (re-build because the
   // cookie writes above may have replaced `response`).
@@ -210,7 +219,18 @@ export async function proxy(request: NextRequest) {
   }
 
   // Re-issue with our tenant headers + any cookie writes Supabase did.
-  const finalResponse = NextResponse.next({ request: { headers: requestHeaders } });
+  //
+  // NOTE: on Netlify Edge, custom `x-bb-*` request headers we stamp
+  // here don't always survive the Edge → Node SSR bridge (whereas
+  // built-in headers like `x-pathname`, `host`, `x-forwarded-host`
+  // do). The SSR layer has a defensive fallback in
+  // `getCurrentTenantId()` that re-resolves the tenant from the host
+  // header. This is belt + suspenders — keep stamping headers because
+  // they DO work on other runtimes (Vercel, local dev), and the host
+  // fallback handles Netlify's quirk.
+  const finalResponse = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
   // Copy any Set-Cookie writes the supabase client put on `response`.
   response.cookies.getAll().forEach((cookie) => {
     finalResponse.cookies.set(cookie);

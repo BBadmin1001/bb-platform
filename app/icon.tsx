@@ -30,6 +30,16 @@ export const runtime = "nodejs"; // need fs for static fallback
 export const size = { width: 256, height: 256 };
 export const contentType = "image/png";
 
+// Multi-tenant: the favicon MUST be resolved per request because
+// `getFavicon()` reads the current tenant from headers/cookies (set by
+// proxy.ts) and pulls that tenant's Cloudinary asset. Without this,
+// Next.js statically optimizes the icon at build time and serves the
+// first tenant's favicon to every tenant. See:
+// node_modules/next/dist/docs/01-app/.../app-icons.md (statically
+// optimized by default unless dynamic config or request-time API).
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function Icon() {
   let src = await getFavicon();
 
