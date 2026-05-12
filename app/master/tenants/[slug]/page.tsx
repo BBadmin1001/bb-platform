@@ -98,33 +98,55 @@ export default async function TenantDetailPage({
         {tenant.custom_domain && ` · ${tenant.custom_domain}`}
       </p>
 
-      {/* Quick links — both URLs carry the preview_token so they
-          resolve to this tenant even when status is still `pending`
-          (i.e. during polishing, before the customer's domain is
-          live). The resolver honours ?tenant= for `active` tenants
-          and ?preview= for any status. */}
-      <div className="flex flex-wrap gap-3 mb-10">
-        <Link
-          href={`/?tenant=${tenant.slug}&preview=${tenant.preview_token}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="admin-btn admin-btn-secondary"
-        >
-          <ExternalLink size={13} className="mr-2" />
-          Visit site
-          <ArrowUpRight size={11} className="ml-1.5" />
-        </Link>
-        <Link
-          href={`/admin?tenant=${tenant.slug}&preview=${tenant.preview_token}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="admin-btn admin-btn-secondary"
-        >
-          <ExternalLink size={13} className="mr-2" />
-          Open admin
-          <ArrowUpRight size={11} className="ml-1.5" />
-        </Link>
-      </div>
+      {/* Quick links.
+          - When the tenant has a custom domain AND status is active,
+            prefer that URL — auth cookies are domain-scoped, so the
+            tenant owner needs to log in on their own domain.
+          - Otherwise fall back to the platform URL with ?tenant= +
+            preview_token, which works for any status (active OR
+            pending, e.g. during polishing).
+          We intentionally do NOT gate on `domain_check_state ===
+          "verified"` because the platform's DNS verifier can only
+          confirm CNAME chains — it can't follow ALIAS records (which
+          flatten to A-record IPs), so ALIAS setups stay "pending"
+          forever even when DNS actually resolves correctly. The
+          custom-domain link will surface as a Netlify 404 if DNS isn't
+          actually wired up, which is a clearer signal than a stale
+          "domain not verified" gate. */}
+      {(() => {
+        const useCustomDomain =
+          tenant.custom_domain && tenant.status === "active";
+        const siteHref = useCustomDomain
+          ? `https://${tenant.custom_domain}/`
+          : `/?tenant=${tenant.slug}&preview=${tenant.preview_token}`;
+        const adminHref = useCustomDomain
+          ? `https://${tenant.custom_domain}/admin`
+          : `/admin?tenant=${tenant.slug}&preview=${tenant.preview_token}`;
+        return (
+          <div className="flex flex-wrap gap-3 mb-10">
+            <Link
+              href={siteHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="admin-btn admin-btn-secondary"
+            >
+              <ExternalLink size={13} className="mr-2" />
+              Visit site
+              <ArrowUpRight size={11} className="ml-1.5" />
+            </Link>
+            <Link
+              href={adminHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="admin-btn admin-btn-secondary"
+            >
+              <ExternalLink size={13} className="mr-2" />
+              Open admin
+              <ArrowUpRight size={11} className="ml-1.5" />
+            </Link>
+          </div>
+        );
+      })()}
 
       {/* LIFECYCLE — workflow stage progress + preview link. Sits at
           the top of the page so master sees the operational state
