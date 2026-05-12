@@ -777,14 +777,28 @@ export async function aiPolishWholeSite(
 // context to write bespoke copy with).
 // ─────────────────────────────────────────────────────────────────────
 
-export type SaveIntakeInput = IntakeData;
+// Master intake carries everything IntakeData has + a handful of
+// extra fields (Cloudinary public_ids for the photos uploaded inside
+// the form, favicon, social-share image) that we use to materialize
+// media rows + content_blocks. Anything outside IntakeData is
+// optional and stored on intake_data as well (it'll just be ignored
+// by AI Polish, which only reads IntakeData fields).
+export type SaveIntakeInput = IntakeData & {
+  portrait_public_id?: string;
+  hero_public_id?: string;
+  brokerage_logo_public_id?: string;
+  favicon_url?: string;
+  favicon_public_id?: string;
+  featured_image_url?: string;
+  featured_image_public_id?: string;
+};
 
 export async function saveTenantIntake(
   slug: string,
   intake: SaveIntakeInput,
   opts?: { thenPolish?: boolean },
 ): Promise<Result & { polished?: AiPolishSiteResult | null }> {
-  const { supabase } = await requireSuperAdmin();
+  const { supabase, user } = await requireSuperAdmin();
 
   if (!intake.realtor_full_name?.trim() || !intake.brokerage_name?.trim()) {
     return {
@@ -813,8 +827,6 @@ export async function saveTenantIntake(
   };
   if (intake.email?.trim()) tenantPatch.contact_email = intake.email.trim();
   if (intake.phone?.trim()) tenantPatch.contact_phone = intake.phone.trim();
-  // Pick the first licensed state as the row's `state_abbr` so the
-  // tenant listing + Brand panel know which state this site is in.
   const firstState = (intake.licensed_states ?? [])
     .map((l) => l.state_abbr?.trim().toUpperCase())
     .filter(Boolean)[0];
@@ -826,21 +838,217 @@ export async function saveTenantIntake(
     .eq("id", tenant.id);
   if (upErr) return { ok: false, error: upErr.message };
 
+  // ── Photos → media rows → content_blocks ─────────────────────
+  // For every photo with a Cloudinary public_id, mint a media row
+  // and wire it into the appropriate brand / home content block so
+  // the renderer picks it up. Photos with only a URL (no public_id)
+  // are skipped — they came from an older intake payload and would
+  // require a re-upload to materialize properly.
+  type PhotoBinding = {
+    label: string;
+    url?: string;
+    publicId?: string;
+    /** Where to write the content_blocks row. */
+    page: "brand" | "home";
+    key: string;
+    /** The JSON shape for the section. */
+    valueFor: (mediaId: string) => Record<string, unknown>;
+  };
+
+  const bindings: PhotoBinding[] = [
+    {
+      label: "portrait",
+      url: intake.portrait_url,
+      publicId: intake.portrait_public_id,
+      page: "brand",
+      key: "portrait",
+      valueFor: (id) => ({ portrait: { image_id: id } }),
+    },
+    {
+      label: "brokerLogo",
+      url: intake.brokerage_logo_url,
+      publicId: intake.brokerage_logo_public_id,
+      page: "brand",
+      key: "brokerLogo",
+      valueFor: (id) => ({ logo: { image_id: id } }),
+    },
+    {
+      label: "favicon",
+      url: intake.favicon_url,
+      publicId: intake.favicon_public_id,
+      page: "brand",
+      key: "favicon",
+      valueFor: (id) => ({ icon: { image_id: id } }),
+    },
+    {
+      label: "featuredImage",
+      url: intake.featured_image_url,
+      publicId: intake.featured_image_public_id,
+      page: "brand",
+      key: "featuredImage",
+      valueFor: (id) => ({ image: { image_id: id } }),
+    },
+  ];
+
+  for (const b of bindings) {
+    if (!b.url || !b.publicId) continue;
+    // Insert media row (don't dedupe — same upload from form yields a
+    // new media row; admin can delete unused ones later if they
+    // accumulate).
+    const { data: media, error: mediaErr } = await supabase
+      .from("media")
+      .insert({
+        tenant_id: tenant.id,
+        kind: "image",
+        cloudinary_public_id: b.publicId,
+        url: b.url,
+        uploaded_by: user.id,
+      })
+      .select("id")
+      .single();
+    if (mediaErr || !media) {
+      return {
+        ok: false,
+        error: `Couldn't save the ${b.label} image: ${mediaErr?.message ?? "unknown error"}`,
+      };
+    }
+    const { error: cbErr } = await supabase
+      .from("content_blocks")
+      .upsert(
+        {
+          tenant_id: tenant.id,
+          page: b.page,
+          key: b.key,
+          value: JSON.stringify(b.valueFor(media.id as string)),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "tenant_id,page,key" },
+      );
+    if (cbErr) {
+      return {
+        ok: false,
+        error: `Saved the ${b.label} image but couldn't wire it to the page: ${cbErr.message}`,
+      };
+    }
+  }
+
+  // Hero background — same flow but lives on home.hero alongside the
+  // existing hero copy fields. We merge into the existing row instead
+  // of overwriting so the eyebrow / title / subtitle / stats / CTAs
+  // (whether default or AI-polished) survive.
+  if (intake.hero_url && intake.hero_public_id) {
+    const { data: media, error: mediaErr } = await supabase
+      .from("media")
+      .insert({
+        tenant_id: tenant.id,
+        kind: "image",
+        cloudinary_public_id: intake.hero_public_id,
+        url: intake.hero_url,
+        uploaded_by: user.id,
+      })
+      .select("id")
+      .single();
+    if (mediaErr || !media) {
+      return {
+        ok: false,
+        error: `Couldn't save the hero image: ${mediaErr?.message ?? "unknown error"}`,
+      };
+    }
+    // Read existing home.hero row, merge in backgroundImage.
+    const { data: existingHero } = await supabase
+      .from("content_blocks")
+      .select("value")
+      .eq("tenant_id", tenant.id)
+      .eq("page", "home")
+      .eq("key", "hero")
+      .maybeSingle();
+    let existingValue: Record<string, unknown> = {};
+    if (existingHero?.value) {
+      try {
+        existingValue = JSON.parse(existingHero.value as string);
+      } catch {
+        existingValue = {};
+      }
+    }
+    const mergedHero = {
+      ...existingValue,
+      backgroundImage: { image_id: media.id as string },
+    };
+    const { error: cbErr } = await supabase
+      .from("content_blocks")
+      .upsert(
+        {
+          tenant_id: tenant.id,
+          page: "home",
+          key: "hero",
+          value: JSON.stringify(mergedHero),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "tenant_id,page,key" },
+      );
+    if (cbErr) {
+      return {
+        ok: false,
+        error: `Saved the hero image but couldn't wire it to the home page: ${cbErr.message}`,
+      };
+    }
+  }
+
+  // ── Brand colors → content_blocks(brand, theme) ──────────────
+  const primary = intake.preferred_primary_color?.trim();
+  const surface = intake.preferred_surface_color?.trim();
+  const validHex = (s?: string) => !!s && /^#[0-9a-fA-F]{6}$/.test(s);
+  if (validHex(primary) || validHex(surface)) {
+    const { data: existingTheme } = await supabase
+      .from("content_blocks")
+      .select("value")
+      .eq("tenant_id", tenant.id)
+      .eq("page", "brand")
+      .eq("key", "theme")
+      .maybeSingle();
+    let theme: Record<string, unknown> = {
+      primary: "#142840",
+      surface: "#F2EFEA",
+      primaryGradient: "",
+      surfaceGradient: "",
+    };
+    if (existingTheme?.value) {
+      try {
+        theme = { ...theme, ...JSON.parse(existingTheme.value as string) };
+      } catch {
+        // fall through with defaults
+      }
+    }
+    if (validHex(primary)) theme.primary = primary;
+    if (validHex(surface)) theme.surface = surface;
+    const { error: themeErr } = await supabase
+      .from("content_blocks")
+      .upsert(
+        {
+          tenant_id: tenant.id,
+          page: "brand",
+          key: "theme",
+          value: JSON.stringify(theme),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "tenant_id,page,key" },
+      );
+    if (themeErr) {
+      return { ok: false, error: `Brand colors save failed: ${themeErr.message}` };
+    }
+  }
+
   revalidatePath(`/master/tenants/${slug}`);
   revalidatePath(`/master/tenants/${slug}/intake`);
+  revalidatePath("/");
+  revalidatePath("/about");
 
   if (opts?.thenPolish) {
     const polished = await aiPolishWholeSite(slug);
     if (polished.ok) {
       return { ok: true, slug, polished };
     }
-    // Intake save succeeded but polish failed — surface the polish
-    // error without rolling back the saved intake.
-    return {
-      ok: true,
-      slug,
-      polished: null,
-    };
+    return { ok: true, slug, polished: null };
   }
 
   return { ok: true, slug };
