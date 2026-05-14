@@ -4,9 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Building2,
-  CreditCard,
-  Inbox as InboxIcon,
   ShieldCheck,
   Menu as MenuIcon,
   LogOut,
@@ -19,17 +16,14 @@ import { createClient } from "@/lib/supabase/client";
 interface NavItem {
   href: string;
   label: string;
-  icon: typeof Building2;
+  icon: typeof Sparkles;
   matchPrefix?: boolean;
 }
 
 const NAV: NavItem[] = [
   { href: "/master", label: "Overview", icon: Sparkles },
-  { href: "/master/prospects", label: "Prospects", icon: HandCoins, matchPrefix: true },
-  { href: "/master/tenants", label: "Tenants", icon: Building2, matchPrefix: true },
   { href: "/master/sales-reps", label: "Sales Reps", icon: Users, matchPrefix: true },
-  { href: "/master/plans", label: "Plans", icon: CreditCard, matchPrefix: true },
-  { href: "/master/leads", label: "All Leads", icon: InboxIcon, matchPrefix: true },
+  { href: "/master/prospects", label: "Prospects", icon: HandCoins, matchPrefix: true },
   { href: "/master/super-admins", label: "Super Admins", icon: ShieldCheck, matchPrefix: true },
 ];
 

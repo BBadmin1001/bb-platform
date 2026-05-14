@@ -1,68 +1,50 @@
 import Link from "next/link";
-import {
-  Building2,
-  CreditCard,
-  Inbox as InboxIcon,
-  Users,
-  ArrowUpRight,
-} from "lucide-react";
+import { Users, ClipboardList, ShieldCheck, ArrowUpRight } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/master";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Master dashboard — quick stats at the top, jump-off cards below.
- * Numbers are live-fetched on every render (force-dynamic) since
- * tenant counts move in seconds during onboarding pushes.
+ * Master dashboard — lead-CRM landing page.
+ *
+ * After the May-2026 pivot the platform is no longer a multi-tenant
+ * site builder, so we strip everything except the three things the
+ * super admin needs:
+ *   1. Quick at-a-glance counts of reps + prospects.
+ *   2. Jump-off cards to the three remaining surfaces (Reps,
+ *      Prospects, Super Admins).
  */
 export default async function MasterDashboard() {
   const { supabase, user } = await requireSuperAdmin();
 
-  // Pull counts in parallel.
-  const [
-    { count: tenantCount },
-    { count: activeTenantCount },
-    { count: planCount },
-    { count: leadCount },
-    { count: subCount },
-  ] = await Promise.all([
-    supabase.from("tenants").select("id", { count: "exact", head: true }),
-    supabase
-      .from("tenants")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "active"),
-    supabase.from("plans").select("id", { count: "exact", head: true }),
-    supabase.from("leads").select("id", { count: "exact", head: true }),
-    supabase
-      .from("tenant_subscriptions")
-      .select("id", { count: "exact", head: true })
-      .in("status", ["active", "trialing"]),
-  ]);
+  const [{ count: repCount }, { count: prospectCount }, { count: paidCount }] =
+    await Promise.all([
+      supabase.from("sales_reps").select("id", { count: "exact", head: true }),
+      supabase.from("prospects").select("id", { count: "exact", head: true }),
+      supabase
+        .from("prospects")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "paid"),
+    ]);
 
   const stats = [
     {
-      label: "Active tenants",
-      value: activeTenantCount ?? 0,
-      sub: `${tenantCount ?? 0} total`,
-      href: "/master/tenants",
+      label: "Sales reps",
+      value: repCount ?? 0,
+      sub: "across the platform",
+      href: "/master/sales-reps",
     },
     {
-      label: "Plans available",
-      value: planCount ?? 0,
-      sub: "editable",
-      href: "/master/plans",
+      label: "Prospects",
+      value: prospectCount ?? 0,
+      sub: `${paidCount ?? 0} paid`,
+      href: "/master/prospects",
     },
     {
-      label: "Active subs",
-      value: subCount ?? 0,
-      sub: "across all tenants",
-      href: "/master/tenants",
-    },
-    {
-      label: "Total leads",
-      value: leadCount ?? 0,
-      sub: "platform-wide",
-      href: "/master/leads",
+      label: "Super admins",
+      value: 1,
+      sub: "platform owners",
+      href: "/master/super-admins",
     },
   ];
 
@@ -88,13 +70,12 @@ export default async function MasterDashboard() {
         className="text-sm max-w-2xl mb-10"
         style={{ color: "var(--muted-foreground)" }}
       >
-        Provision and manage every tenant on the platform. Edit plans and
-        prices. See platform-wide leads. The controls here apply across
-        every realtor's site.
+        Add sales reps, share their onboarding links with realtor leads,
+        and review every completed intake in one place.
       </p>
 
       {/* Quick stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-10">
         {stats.map((s) => (
           <Link
             key={s.label}
@@ -125,29 +106,23 @@ export default async function MasterDashboard() {
       </div>
 
       {/* Jump-off cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <JumpCard
-          icon={Building2}
-          title="Tenants"
-          description="Provision a new realtor's site. Edit existing tenant brands, status, plans, and impersonate to debug."
-          href="/master/tenants"
-        />
-        <JumpCard
-          icon={CreditCard}
-          title="Plans & Pricing"
-          description="Edit feature bundle prices and which feature flags they unlock when a customer subscribes."
-          href="/master/plans"
-        />
-        <JumpCard
-          icon={InboxIcon}
-          title="All Leads"
-          description="Cross-tenant lead inbox. Helpful for support — see what's coming in across every site."
-          href="/master/leads"
-        />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <JumpCard
           icon={Users}
-          title="Super Admins"
-          description="Who else has master-dashboard access. Add or remove platform-level operators."
+          title="Sales reps"
+          description="Add reps, set their commission %, and generate their per-rep onboarding link to share with realtor leads."
+          href="/master/sales-reps"
+        />
+        <JumpCard
+          icon={ClipboardList}
+          title="Prospects"
+          description="Every realtor who completed the onboarding intake — their bio, brokerage, photos, voice direction, and notes."
+          href="/master/prospects"
+        />
+        <JumpCard
+          icon={ShieldCheck}
+          title="Super admins"
+          description="Grant master access to teammates."
           href="/master/super-admins"
         />
       </div>
@@ -161,7 +136,7 @@ function JumpCard({
   description,
   href,
 }: {
-  icon: typeof Building2;
+  icon: typeof Users;
   title: string;
   description: string;
   href: string;
@@ -169,31 +144,33 @@ function JumpCard({
   return (
     <Link
       href={href}
-      className="admin-card p-6 hover:shadow-md transition-shadow flex flex-col"
+      className="admin-card p-5 hover:shadow-md transition-shadow group"
       style={{ color: "var(--card-foreground)" }}
     >
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start gap-3 mb-3">
         <span
-          className="flex h-10 w-10 items-center justify-center rounded-lg"
+          className="flex h-9 w-9 items-center justify-center rounded-md shrink-0"
           style={{
-            background: "color-mix(in srgb, var(--primary) 14%, var(--card))",
+            background: "color-mix(in srgb, var(--primary) 14%, transparent)",
             color: "var(--primary)",
-            border:
-              "1px solid color-mix(in srgb, var(--primary) 25%, transparent)",
           }}
         >
-          <Icon size={18} strokeWidth={1.6} />
+          <Icon size={16} strokeWidth={1.6} />
         </span>
+        <p
+          className="text-base"
+          style={{ fontWeight: 600, color: "var(--card-foreground)" }}
+        >
+          {title}
+        </p>
         <ArrowUpRight
           size={14}
+          className="ml-auto group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"
           style={{ color: "var(--muted-foreground)" }}
         />
       </div>
-      <h3 className="text-base mb-1" style={{ fontWeight: 600 }}>
-        {title}
-      </h3>
       <p
-        className="text-xs leading-relaxed flex-1"
+        className="text-[12px] leading-relaxed"
         style={{ color: "var(--muted-foreground)" }}
       >
         {description}

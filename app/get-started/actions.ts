@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { getCurrentTenantSlug } from "@/lib/tenant/context";
+// `source` is hard-coded "website" after the May-2026 pivot — there's
+// only one host left (smartweb.brandbonjour.com) and prospects are
+// attributed to a sales_rep via the link token, not a tenant slug.
 import { getCanonicalMasterHost } from "@/lib/tenant/resolver";
 import { createPaymentLinkForQuote, isStripeConfigured } from "@/lib/stripe";
 import {
@@ -40,8 +42,7 @@ export async function submitIntake(input: IntakeInput): Promise<Result> {
     return { ok: false, error: "That email doesn't look right." };
   }
 
-  const tenantSlug = await getCurrentTenantSlug();
-  const source = tenantSlug ? `referral:${tenantSlug}` : "website";
+  const source = "website";
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -170,8 +171,7 @@ export async function submitIntakeWizard(
   }
 
   // Source attribution — same convention as the legacy short form.
-  const tenantSlug = await getCurrentTenantSlug();
-  const source = tenantSlug ? `referral:${tenantSlug}` : "website";
+  const source = "website";
 
   // ── 2. insert prospect ───────────────────────────────────────
   const supabase = await createClient();

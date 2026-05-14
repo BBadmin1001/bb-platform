@@ -4,10 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { useAdminLayout } from "./AdminLayoutProvider";
+
+// The pre-pivot AdminLayoutProvider used to pipe through a per-tenant
+// realtor name to render on the login page. After May 2026 there's no
+// tenant context — the login page is platform-wide, so we just hard-
+// code the BB Platform branding.
+const realtorName: string | null = null;
 
 export default function AdminLoginForm({ from }: { from?: string }) {
-  const { realtorName } = useAdminLayout();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

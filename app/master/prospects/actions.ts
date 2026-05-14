@@ -8,8 +8,6 @@ import {
   createPaymentLinkForQuote,
   isStripeConfigured,
 } from "@/lib/stripe";
-import { seedTenantFromIntake } from "@/lib/seedTenantFromIntake";
-import type { IntakeData } from "@/lib/intakeSchema";
 
 type Result =
   | { ok: true; prospectId?: string; paymentLinkUrl?: string }
@@ -242,98 +240,20 @@ export async function createQuote(input: {
  * (kicks off DNS check + Netlify alias sync via the existing
  * createTenant flow).
  */
-export async function provisionFromProspect(input: {
+/**
+ * Stub kept for backwards-compat with `<ProspectWorkspace>`. After the
+ * May-2026 pivot the platform doesn't provision tenant sites anymore —
+ * the realtor builds their site separately. So this just no-ops with
+ * a clear error so the UI can render a friendly notice instead of
+ * silently failing.
+ */
+export async function provisionFromProspect(_input: {
   prospectId: string;
   slug: string;
 }): Promise<Result> {
-  const { supabase, user } = await requireSuperAdmin();
-
-  const slug = input.slug.trim().toLowerCase();
-  if (!/^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/.test(slug)) {
-    return { ok: false, error: "Slug must be lowercase / digits / dashes." };
-  }
-
-  const { data: p } = await supabase
-    .from("prospects")
-    .select(
-      "id, business_name, contact_name, email, phone, desired_domain, state_abbr, status, intake_data, tenant_id",
-    )
-    .eq("id", input.prospectId)
-    .maybeSingle();
-  if (!p) return { ok: false, error: "Prospect not found." };
-  if (p.tenant_id) {
-    return {
-      ok: false,
-      error: "This prospect already has a tenant — open it from the Tenants tab.",
-    };
-  }
-
-  // Prefer intake_data values over the legacy short-form columns.
-  // intake.realtor_full_name is the customer's BUSINESS-facing name
-  // (what shows on the site); contact_name from the legacy form was
-  // really the same thing for old prospects, so fall through.
-  const intake = (p.intake_data ?? null) as IntakeData | null;
-  const realtorName = intake?.realtor_full_name?.trim() || p.contact_name;
-  const brokerage = intake?.brokerage_name?.trim() || p.business_name;
-  const stateAbbr =
-    intake?.licensed_states?.[0]?.state_abbr?.toUpperCase() ||
-    p.state_abbr ||
-    null;
-  const desiredDomain = intake?.desired_domain || p.desired_domain || null;
-
-  // Insert the tenant — pending status, domain will run through the
-  // standard verifier on its own.
-  const { data: tenantRow, error: tErr } = await supabase
-    .from("tenants")
-    .insert({
-      slug,
-      realtor_name: realtorName,
-      brokerage,
-      contact_email: p.email,
-      contact_phone: intake?.phone || p.phone,
-      state_abbr: stateAbbr,
-      custom_domain: desiredDomain,
-      domain_check_state: desiredDomain ? "pending" : "unset",
-      status: "pending",
-      prospect_id: p.id,
-    })
-    .select("id")
-    .single();
-  if (tErr) return { ok: false, error: tErr.message };
-
-  // Seed content from the intake payload — Phase 8. This is what
-  // makes "polishing" actually polishing instead of data entry.
-  let seedWarnings: string[] = [];
-  if (intake) {
-    const seed = await seedTenantFromIntake(supabase, tenantRow.id, intake);
-    if (seed.ok) {
-      seedWarnings = seed.warnings;
-    } else {
-      // Don't fail the provisioning — the tenant exists, just log.
-      console.warn("[provisionFromProspect] seed failed:", seed.error);
-    }
-  }
-
-  // Link back + flip lifecycle.
-  await supabase
-    .from("prospects")
-    .update({
-      tenant_id: tenantRow.id,
-      status: "provisioned",
-      provisioned_by: user.id,
-      provisioned_at: new Date().toISOString(),
-    })
-    .eq("id", p.id);
-
-  if (seedWarnings.length > 0) {
-    console.warn(
-      "[provisionFromProspect] partial seed:",
-      seedWarnings.join("; "),
-    );
-  }
-
-  revalidatePath(`/master/prospects/${input.prospectId}`);
-  revalidatePath("/master/prospects");
-  revalidatePath("/master/tenants");
-  return { ok: true, prospectId: input.prospectId };
+  return {
+    ok: false,
+    error:
+      "Tenant provisioning is disabled — the lead-CRM doesn't build sites. Use the intake data to set the realtor up manually.",
+  };
 }

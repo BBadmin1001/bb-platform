@@ -1,31 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { resolveTenant, MASTER_HOSTS } from "@/lib/tenant/resolver";
-import {
-  CONTEXT_HEADER,
-  TENANT_ID_HEADER,
-  TENANT_SLUG_HEADER,
-} from "@/lib/tenant/context";
 
 /**
- * Edge proxy. Two responsibilities per request:
+ * Edge proxy — slim post-pivot version.
  *
- *   1. Tenant resolution. Look at the hostname, decide which tenant
- *      this request belongs to (or master, or unknown), and stamp
- *      three headers so the rest of the app reads them via
- *      next/headers:
+ * After the May-2026 lead-CRM pivot the platform runs on a single
+ * host (smartweb.brandbonjour.com) and has no public tenant sites,
+ * so all the multi-tenant resolution that used to live here is gone.
+ * The proxy now does exactly two things:
  *
- *        x-bb-context       'tenant' | 'master' | 'unknown'
- *        x-bb-tenant-id     UUID, or '' for master/unknown
- *        x-bb-tenant-slug   slug, or '' for master/unknown
+ *   1. Refresh the Supabase auth session on every request so cookies
+ *      don't go stale during long-lived sessions.
+ *   2. Gate deeper `/admin/*` paths — anonymous visitors hitting
+ *      anything past the public sign-in / sign-up / forgot-password
+ *      / reset-password screens are bounced back to `/admin` with a
+ *      `?from=` query so they can come back after auth.
  *
- *   2. Auth refresh + /admin gating. Calls supabase.auth.getUser() to
- *      keep the session cookies fresh on every request, and bounces
- *      anonymous visitors hitting deeper /admin/* paths back to
- *      /admin/login.
- *
- * The matcher below skips static assets and Next.js internals so we
- * don't pay a DB lookup for every favicon and JS chunk.
+ * The matcher (config below) skips static assets, Next internals,
+ * and `/api/*` so the proxy doesn't run for favicons, JS chunks, or
+ * the Stripe webhook.
  */
 
 const ADMIN_PUBLIC_PATHS = new Set([
@@ -36,27 +29,10 @@ const ADMIN_PUBLIC_PATHS = new Set([
   "/admin/reset-password",
 ]);
 
-/** Cookie that remembers which tenant a master operator is currently
- *  "viewing as." Set when ?tenant=<slug> hits a URL, read on later
- *  requests so internal admin navigation (which strips the query)
- *  stays in that tenant's context. Safe to set unconditionally: the
- *  cookie only SCOPES the admin UI; every actual write still goes
- *  through requireTenantUser which validates membership or
- *  super_admin status before mutating data. */
-const MASTER_TENANT_COOKIE = "bb-master-tenant";
-
 export async function proxy(request: NextRequest) {
   const url = new URL(request.url);
-  const host = request.headers.get("host") ?? url.host;
-
-  const explicitTenant = url.searchParams.get("tenant");
-  const cookieTenant = request.cookies.get(MASTER_TENANT_COOKIE)?.value;
 
   // ── Auth refresh ──────────────────────────────────────────────────
-  // Run BEFORE tenant resolution so we know whether the user is a
-  // super admin and can decide whether to honor the sticky cookie.
-  // Non-super-admin users with a stale cookie must NOT inherit the
-  // master-view tenant context (A4-006 — privilege escalation).
   let response = NextResponse.next({ request });
   let user = null as null | { id: string };
 
@@ -89,139 +65,10 @@ export async function proxy(request: NextRequest) {
     user = data.user ? { id: data.user.id } : null;
   }
 
-  // Is this user a super admin? Needed to decide whether the sticky
-  // cookie applies. One DB read per request — acceptable for the
-  // security guarantee.
-  let isSuperAdmin = false;
-  if (user && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    try {
-      const svc = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY,
-        { cookies: { getAll: () => [], setAll: () => {} } },
-      );
-      const { data } = await svc
-        .from("super_admins")
-        .select("user_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      isSuperAdmin = !!data;
-    } catch {
-      // If the super-admin check itself fails, default to false —
-      // safer to lose master context than to leak it.
-      isSuperAdmin = false;
-    }
-  }
-
-  // Build an "effective" searchParams that falls back to the sticky
-  // cookie ONLY when the requesting user is a verified super admin.
-  // For everyone else (signed-out users, tenant members, sales reps,
-  // random visitors), the cookie is ignored. Explicit ?tenant= still
-  // works for everyone since that resolves to public/active tenants
-  // only.
-  const effectiveSearchParams = new URLSearchParams(url.searchParams);
-  if (!explicitTenant && cookieTenant && isSuperAdmin) {
-    effectiveSearchParams.set("tenant", cookieTenant);
-  }
-
-  // Resolve tenant, but catch failures defensively so a downstream
-  // Supabase outage doesn't take the whole proxy down — we'd rather
-  // fall through to the "unknown" path (which lets the SSR layer
-  // re-resolve via host header) than 500.
-  let ctx: Awaited<ReturnType<typeof resolveTenant>>;
-  try {
-    ctx = await resolveTenant(host, effectiveSearchParams);
-  } catch {
-    ctx = { kind: "unknown", hostname: host };
-  }
-
-  // ── Public visitors on master host with ?tenant=X → bounce to the
-  //    tenant's custom_domain. Without this redirect, the home page
-  //    renders fine via ?tenant= override, but the first nav click
-  //    hits master's "kind=master AND path not allowed → /master"
-  //    redirect because the relative nav link has no ?tenant= query.
-  //    Sending them to the actual custom domain is the only way to
-  //    make subsequent nav stay on the tenant.
-  //
-  //    Super admins keep the existing behavior — they sometimes need
-  //    to view-as-tenant from master without leaving the master URL.
-  if (
-    MASTER_HOSTS.has(host) &&
-    !isSuperAdmin &&
-    ctx.kind === "tenant" &&
-    ctx.tenant.custom_domain &&
-    ctx.tenant.custom_domain.toLowerCase() !== host
-  ) {
-    const target = new URL(url.toString());
-    target.host = ctx.tenant.custom_domain;
-    target.protocol = "https:";
-    target.port = "";
-    // Drop the ?tenant= param — the tenant is now resolved by host.
-    // Keep ?preview= so master-shared preview URLs work cross-domain.
-    target.searchParams.delete("tenant");
-    return NextResponse.redirect(target, 302);
-  }
-
-  // Stamp tenant headers on the resolved request (re-build because the
-  // cookie writes above may have replaced `response`).
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set(CONTEXT_HEADER, ctx.kind);
-  requestHeaders.set(
-    TENANT_ID_HEADER,
-    ctx.kind === "tenant" ? ctx.tenant.id : "",
-  );
-  requestHeaders.set(
-    TENANT_SLUG_HEADER,
-    ctx.kind === "tenant" ? ctx.tenant.slug : "",
-  );
-  // Stamp the request pathname so the root layout can decide whether
-  // to render the public Header/Footer (skipped for /admin and /master).
-  requestHeaders.set("x-pathname", url.pathname);
-
+  // ── /admin gating ─────────────────────────────────────────────────
   const path = url.pathname;
   const isAdminPath = path.startsWith("/admin");
   const isAdminPublic = ADMIN_PUBLIC_PATHS.has(path);
-
-  // Master hostname: the public realtor template doesn't apply here.
-  // Anything that isn't an allowed master-hostname path goes straight
-  // to /master, which itself gates on super_admin and bounces
-  // unauthenticated visitors to the login form. Net effect: the
-  // master hostname's "front page" is the master dashboard (or login),
-  // BUT customer-facing onboarding URLs (/get-started, /onboarding/done)
-  // still work — those are how sales reps send prospects in.
-  //
-  // EXCEPTION: when the URL carries a valid `?preview=<token>` query,
-  // the resolver above already returned `kind: "tenant"` (regardless
-  // of host), so we never reach this branch in that case. No special-
-  // casing needed here — preview links just route through normally.
-  const ALLOWED_ON_MASTER_HOST = [
-    "/master",
-    "/admin",
-    "/api",
-    "/get-started",
-    "/onboarding",
-    "/sales",
-  ];
-  // A3-014: when the URL carries `?tenant=<slug>` AND the visitor is
-  // a signed-in super-admin, allow them through to the public site
-  // even though the resolver returned `kind:master` (e.g. because
-  // the tenant is `status='pending'` and didn't match the active-only
-  // ?tenant= path in the resolver). This is what lets the "Visit
-  // site" button on /master/tenants/<slug> actually work for a
-  // pending tenant. The downstream public template will pick up the
-  // tenant_id from the explicit query through getCurrentTenantId().
-  const tenantQuery = url.searchParams.get("tenant");
-  const isSuperAdminOnTenantQuery =
-    !!user && !!tenantQuery && tenantQuery.length > 0;
-  if (
-    ctx.kind === "master" &&
-    !ALLOWED_ON_MASTER_HOST.some((p) => path === p || path.startsWith(p + "/")) &&
-    !isSuperAdminOnTenantQuery
-  ) {
-    const redirectUrl = new URL(url.toString());
-    redirectUrl.pathname = "/master";
-    return NextResponse.redirect(redirectUrl);
-  }
 
   // Block deeper /admin/* without auth — bounce to /admin (which
   // renders the login form when there's no session).
@@ -232,7 +79,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Send signed-in users away from login/signup/forgot back into /admin.
+  // Send signed-in users away from the login form pages.
   if (
     user &&
     (path === "/admin/login" ||
@@ -245,67 +92,18 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Re-issue with our tenant headers + any cookie writes Supabase did.
-  //
-  // NOTE: on Netlify Edge, custom `x-bb-*` request headers we stamp
-  // here don't always survive the Edge → Node SSR bridge (whereas
-  // built-in headers like `x-pathname`, `host`, `x-forwarded-host`
-  // do). The SSR layer has a defensive fallback in
-  // `getCurrentTenantId()` that re-resolves the tenant from the host
-  // header. This is belt + suspenders — keep stamping headers because
-  // they DO work on other runtimes (Vercel, local dev), and the host
-  // fallback handles Netlify's quirk.
-  const finalResponse = NextResponse.next({
-    request: { headers: requestHeaders },
-  });
-  // Copy any Set-Cookie writes the supabase client put on `response`.
-  response.cookies.getAll().forEach((cookie) => {
-    finalResponse.cookies.set(cookie);
-  });
-
-  // Persist the master "viewing as" tenant choice in a cookie so that
-  // internal admin links (which don't carry ?tenant=) keep the
-  // tenant in context. ONLY set for super admins — A4-006 fix. For
-  // everyone else, clear any stale cookie so a previous master
-  // session can't bleed into the current user's context.
-  if (
-    isSuperAdmin &&
-    explicitTenant &&
-    ctx.kind === "tenant" &&
-    ctx.tenant.slug === explicitTenant.toLowerCase()
-  ) {
-    finalResponse.cookies.set(MASTER_TENANT_COOKIE, ctx.tenant.slug, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 8, // 8 hours — refreshed every time master clicks "Open admin"
-    });
-  } else if (
-    isSuperAdmin &&
-    url.searchParams.has("tenant") &&
-    !explicitTenant
-  ) {
-    // Super admin hit ?tenant= with empty value → explicit clear.
-    finalResponse.cookies.delete(MASTER_TENANT_COOKIE);
-  } else if (!isSuperAdmin && cookieTenant) {
-    // Non-super-admin holding a stale cookie → wipe it. Belt + suspenders
-    // since we already ignore it during this request.
-    finalResponse.cookies.delete(MASTER_TENANT_COOKIE);
-  }
-
-  return finalResponse;
+  return response;
 }
 
 export const config = {
   matcher: [
     /*
      * Skip:
-     *   - /api  (route handlers carry their own auth/tenant logic)
+     *   - /api               (route handlers carry their own auth)
      *   - /_next/static, /_next/image
      *   - common static asset extensions in /public
      *   - Next.js internals (/__nextjs*)
      */
-    "/((?!api|_next/static|_next/image|__nextjs|favicon\\.ico|robots\\.txt|sitemap\\.xml|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|map|woff2?|ttf)$).*)",
+    "/((?!api|_next/static|_next/image|__nextjs|favicon\\.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|map|woff2?|ttf)$).*)",
   ],
 };
